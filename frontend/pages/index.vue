@@ -77,7 +77,8 @@ const {
   disconnect,
   sendMessage,
   clearMessages,
-  loadMessages
+  loadMessages,
+  resetSession
 } = useChatSocket()
 
 // Conversations composable
@@ -213,6 +214,26 @@ const handleReconnect = () => {
 }
 
 /**
+ * Handle starting a new conversation with backend reset.
+ */
+const handleNewConversation = () => {
+  console.log('🆕 Starting new conversation with backend reset')
+
+  // Reset backend session (clears Claude's context)
+  if (resetSession()) {
+    console.log('✅ Backend reset request sent')
+    // Backend will send reset_complete message which triggers clearMessages()
+  } else {
+    console.error('❌ Failed to send backend reset request')
+    // Still create new conversation even if reset fails
+  }
+
+  // Create new frontend conversation
+  const newConv = startNewConversation()
+  console.log('📝 Created new conversation:', newConv.id)
+}
+
+/**
  * Handle edit message action.
  */
 const handleEditMessage = (message: ChatMessage) => {
@@ -263,8 +284,8 @@ const handleKeyboardShortcuts = (event: KeyboardEvent) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
     event.preventDefault()
     console.log('⌨️ Keyboard shortcut - New conversation')
-    const newConv = startNewConversation()
-    // Watch will trigger and clear messages automatically
+    handleNewConversation()
+    // Backend reset will clear messages, watch will handle conversation switch
   }
 
   // Ctrl+Shift+Delete to reset localStorage (for debugging)

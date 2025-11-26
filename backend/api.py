@@ -142,6 +142,35 @@ async def websocket_chat(websocket: WebSocket) -> None:
 
             try:
                 message_data = json.loads(data)
+
+                # PATTERN: Handle session reset request
+                if message_data.get("type") == "reset":
+                    logger.info("Received reset request - clearing conversation context")
+                    try:
+                        # Close current session (clears Claude's conversation memory)
+                        await agent.close_session()
+                        # Start fresh session (new context)
+                        await agent.start_session()
+                        logger.info("Session reset complete - new conversation context")
+
+                        # Send confirmation to client
+                        reset_chunk = StreamChunk(
+                            type="reset_complete",
+                            content="Conversation context has been reset. Starting fresh!",
+                            completed=True,
+                        )
+                        await websocket.send_json(reset_chunk.model_dump())
+                        continue
+                    except Exception as reset_error:
+                        logger.error(f"Error during session reset: {reset_error}", exc_info=True)
+                        error_chunk = StreamChunk(
+                            type="error",
+                            content=f"Failed to reset session: {str(reset_error)}",
+                            completed=True,
+                        )
+                        await websocket.send_json(error_chunk.model_dump())
+                        continue
+
                 user_message = message_data.get("message", "")
 
                 if not user_message:

@@ -135,6 +135,18 @@ export const useChatSocket = () => {
         currentAssistantMessage.value = ''
         isProcessing.value = false
         break
+
+      case 'reset_complete':
+        // Handle session reset confirmation from backend
+        console.log('✅ Session reset complete:', chunk.content)
+        // Clear all messages when reset is confirmed
+        clearMessages()
+        break
+
+      case 'connected':
+        // Initial connection message
+        console.log('Connected:', chunk.content)
+        break
     }
   }
 
@@ -209,6 +221,28 @@ export const useChatSocket = () => {
   }
 
   /**
+   * Reset the backend conversation session (clears Claude's context).
+   */
+  const resetSession = () => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket is not connected')
+      connectionState.value.error = 'Not connected to server'
+      return false
+    }
+
+    try {
+      // Send reset message to backend
+      socket.value.send(JSON.stringify({ type: "reset" }))
+      console.log('🔄 Sent reset request to backend')
+      return true
+    } catch (error) {
+      console.error('Failed to send reset request:', error)
+      connectionState.value.error = 'Failed to send reset request'
+      return false
+    }
+  }
+
+  /**
    * Get the current partial assistant message (for live streaming display).
    */
   const partialMessage = computed(() => currentAssistantMessage.value)
@@ -250,6 +284,7 @@ export const useChatSocket = () => {
     disconnect,
     sendMessage,
     clearMessages,
-    loadMessages
+    loadMessages,
+    resetSession
   }
 }

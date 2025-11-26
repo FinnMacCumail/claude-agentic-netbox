@@ -96,12 +96,12 @@ class StreamChunk(BaseModel):
     Streaming response chunk sent over WebSocket.
 
     Attributes:
-        type: Type of chunk (text, tool_use, tool_result, thinking, error, connected).
+        type: Type of chunk (text, tool_use, tool_result, thinking, error, connected, reset_complete).
         content: Chunk content (text, status message, error message, etc.).
         completed: Whether this is the final chunk of the response.
     """
 
-    type: Literal["text", "tool_use", "tool_result", "thinking", "error", "connected"]
+    type: Literal["text", "tool_use", "tool_result", "thinking", "error", "connected", "reset_complete"]
     content: str
     completed: bool = False
 

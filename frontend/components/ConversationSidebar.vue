@@ -23,12 +23,28 @@ const {
   clearAllConversations
 } = useConversations()
 
+// Get resetSession from chat socket to clear backend context
+const { resetSession } = useChatSocket()
+
 /**
  * Handle new conversation button click.
+ * Resets backend session (clears Claude's context) before creating new conversation.
  */
 const handleNewChat = () => {
+  console.log('🆕 New chat button clicked - resetting backend session')
+
+  // Reset backend session (clears Claude's conversation context)
+  if (resetSession()) {
+    console.log('✅ Backend reset request sent from sidebar')
+  } else {
+    console.error('❌ Failed to send backend reset request from sidebar')
+  }
+
+  // Create new frontend conversation
   startNewConversation()
-  emit('close') // Close sidebar on mobile after creating
+
+  // Close sidebar on mobile after creating
+  emit('close')
 }
 
 /**
