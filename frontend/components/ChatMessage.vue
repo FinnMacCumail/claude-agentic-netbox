@@ -1,10 +1,53 @@
 <template>
-  <div class="chat-message" :class="messageClass">
+  <div class="chat-message group" :class="messageClass">
     <div class="message-header">
       <span class="message-role">{{ roleLabel }}</span>
       <span class="message-time">{{ formattedTime }}</span>
     </div>
     <div class="message-content" v-html="formattedContent"></div>
+
+    <!-- Message actions (visible on hover) -->
+    <div class="message-actions">
+      <!-- Copy button (all messages) -->
+      <button
+        class="action-button"
+        :class="{ copied: copySuccess }"
+        :title="copySuccess ? 'Copied!' : 'Copy message'"
+        @click="handleCopy"
+      >
+        <svg v-if="!copySuccess" xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+          <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+        </svg>
+      </button>
+
+      <!-- Edit button (user messages only) -->
+      <button
+        v-if="message.role === 'user'"
+        class="action-button"
+        title="Edit message"
+        @click="handleEdit"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+        </svg>
+      </button>
+
+      <!-- Regenerate button (user messages only) -->
+      <button
+        v-if="message.role === 'user'"
+        class="action-button"
+        title="Regenerate response"
+        @click="handleRegenerate"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -17,6 +60,13 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  edit: [message: ChatMessage]
+  regenerate: [message: ChatMessage]
+}>()
+
+const copySuccess = ref(false)
 
 const messageClass = computed(() => ({
   'user-message': props.message.role === 'user',
@@ -39,11 +89,41 @@ const formattedContent = computed(() => {
   // Escape HTML for user messages
   return props.message.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 })
+
+/**
+ * Copy message content to clipboard.
+ */
+const handleCopy = async () => {
+  try {
+    await navigator.clipboard.writeText(props.message.content)
+    copySuccess.value = true
+
+    setTimeout(() => {
+      copySuccess.value = false
+    }, 2000)
+  } catch (error) {
+    console.error('Failed to copy message:', error)
+  }
+}
+
+/**
+ * Emit edit event for user messages.
+ */
+const handleEdit = () => {
+  emit('edit', props.message)
+}
+
+/**
+ * Emit regenerate event for user messages.
+ */
+const handleRegenerate = () => {
+  emit('regenerate', props.message)
+}
 </script>
 
 <style scoped>
 .chat-message {
-  @apply mb-4 p-4 rounded-lg;
+  @apply mb-4 p-4 rounded-lg relative;
 }
 
 .user-message {
@@ -64,6 +144,39 @@ const formattedContent = computed(() => {
 
 .message-time {
   @apply text-gray-500 dark:text-gray-400;
+  @apply transition-opacity duration-200;
+}
+
+/* Highlight timestamp on message hover */
+.chat-message:hover .message-time {
+  @apply text-gray-700 dark:text-gray-300;
+}
+
+/* Message actions */
+.message-actions {
+  @apply absolute top-2 right-2;
+  @apply flex items-center gap-1;
+  @apply opacity-0 group-hover:opacity-100;
+  @apply transition-opacity duration-200;
+}
+
+.action-button {
+  @apply p-1.5 rounded-md;
+  @apply bg-white dark:bg-gray-800;
+  @apply border border-gray-200 dark:border-gray-700;
+  @apply text-gray-600 dark:text-gray-400;
+  @apply hover:text-gray-900 dark:hover:text-gray-100;
+  @apply hover:bg-gray-50 dark:hover:bg-gray-700;
+  @apply transition-colors duration-150;
+  @apply shadow-sm;
+}
+
+.action-button.copied {
+  @apply text-green-600 dark:text-green-400;
+}
+
+.icon {
+  @apply w-4 h-4;
 }
 
 .message-content {

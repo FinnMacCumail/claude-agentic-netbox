@@ -196,6 +196,16 @@ export const useChatSocket = () => {
   const clearMessages = () => {
     messages.value = []
     currentAssistantMessage.value = ''
+    isProcessing.value = false
+  }
+
+  /**
+   * Load messages from a conversation (for switching between conversations).
+   */
+  const loadMessages = (conversationMessages: ChatMessage[]) => {
+    messages.value = [...conversationMessages]
+    currentAssistantMessage.value = ''
+    isProcessing.value = false
   }
 
   /**
@@ -239,6 +249,7 @@ export const useChatSocket = () => {
     connect,
     disconnect,
     sendMessage,
-    clearMessages
+    clearMessages,
+    loadMessages
   }
 }

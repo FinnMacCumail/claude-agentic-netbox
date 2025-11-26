@@ -72,6 +72,11 @@ dmypy.json
 dist/
 build/
 
+# Node.js (Playwright MCP)
+node_modules/
+playwright-browsers/
+package-lock.json
+
 # Frontend (Nuxt.js)
 frontend/node_modules/
 frontend/.nuxt/

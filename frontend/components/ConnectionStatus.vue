@@ -59,11 +59,11 @@ const statusText = computed(() => {
   return 'Disconnected'
 })
 
-const showError = computed(() =>
+const showError = computed<boolean>(() =>
   props.connectionState.error !== null && !props.connectionState.connecting
 )
 
-const showReconnect = computed(() =>
+const showReconnect = computed<boolean>(() =>
   !props.connectionState.connected &&
   !props.connectionState.connecting &&
   props.connectionState.reconnectAttempts >= 5

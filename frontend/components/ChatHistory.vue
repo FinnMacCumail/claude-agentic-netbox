@@ -24,6 +24,8 @@
         v-for="(message, index) in messages"
         :key="`message-${index}`"
         :message="message"
+        @edit="$emit('edit', $event)"
+        @regenerate="$emit('regenerate', $event)"
       />
 
       <!-- Loading indicator -->
@@ -52,6 +54,11 @@ const props = withDefaults(defineProps<Props>(), {
   isProcessing: false,
   partialMessage: ''
 })
+
+defineEmits<{
+  edit: [message: ChatMessage]
+  regenerate: [message: ChatMessage]
+}>()
 
 const historyContainer = ref<HTMLElement>()
 
