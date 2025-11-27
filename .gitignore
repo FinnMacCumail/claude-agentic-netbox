@@ -76,6 +76,10 @@ build/
 node_modules/
 playwright-browsers/
 package-lock.json
+.mcp.json
+.playwright-mcp/
+package.json
+yes/
 
 # Frontend (Nuxt.js)
 frontend/node_modules/
