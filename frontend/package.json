@@ -11,6 +11,10 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "dompurify": "^3.3.0",
+    "highlight.js": "^11.11.1",
+    "isomorphic-dompurify": "^2.33.0",
+    "marked": "^17.0.1",
     "nuxt": "^3.14.0",
     "vue": "^3.5.25",
     "vue-router": "^4.6.3"

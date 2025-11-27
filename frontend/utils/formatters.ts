@@ -2,6 +2,42 @@
  * Utility functions for formatting content in the chat interface.
  */
 
+import { marked, Renderer } from 'marked'
+import DOMPurify from 'isomorphic-dompurify'
+import hljs from 'highlight.js'
+
+// Create custom renderer
+const renderer = new Renderer()
+
+// Override table rendering to add wrapper div and custom class
+const originalTable = renderer.table.bind(renderer)
+renderer.table = function(header: string, body: string): string {
+  const table = originalTable(header, body)
+  return `<div class="table-wrapper">${table.replace('<table>', '<table class="markdown-table">')}</div>`
+}
+
+// Override code rendering for syntax highlighting
+const originalCode = renderer.code.bind(renderer)
+renderer.code = function(code: string, language: string | undefined): string {
+  if (language && hljs.getLanguage(language)) {
+    try {
+      const highlighted = hljs.highlight(code, { language }).value
+      return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`
+    } catch (err) {
+      console.error('Syntax highlighting error:', err)
+    }
+  }
+  return originalCode(code, language)
+}
+
+// Configure marked options
+marked.setOptions({
+  renderer: renderer,
+  gfm: true, // GitHub Flavored Markdown
+  breaks: true, // Convert \n to <br>
+  pedantic: false
+})
+
 /**
  * Format a timestamp into a human-readable time string.
  */
@@ -37,72 +73,33 @@ export const formatTime = (timestamp: string): string => {
 }
 
 /**
- * Basic markdown to HTML conversion for chat messages.
- * This is a simplified version - for production, consider using a library like marked.js
+ * Convert markdown to HTML with syntax highlighting and table support.
+ * Uses marked.js for markdown parsing and highlight.js for code syntax highlighting.
  */
 export const formatMarkdown = (text: string): string => {
-  let html = text
+  try {
+    // Parse markdown to HTML
+    const rawHtml = marked.parse(text) as string
 
-  // Escape HTML first
-  html = html.replace(/&/g, '&amp;')
-  html = html.replace(/</g, '&lt;')
-  html = html.replace(/>/g, '&gt;')
+    // Sanitize HTML to prevent XSS attacks
+    const sanitizedHtml = DOMPurify.sanitize(rawHtml, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
+        'a', 'ul', 'ol', 'li', 'blockquote',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'div', 'span'
+      ],
+      ALLOWED_ATTR: ['href', 'target', 'class', 'rel'],
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+    })
 
-  // Headers (h3, h2, h1)
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-
-  // Bold text
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/__(.+?)__/g, '<strong>$1</strong>')
-
-  // Italic text
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-  html = html.replace(/_(.+?)_/g, '<em>$1</em>')
-
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-
-  // Code blocks
-  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-    return `<pre><code class="language-${lang || 'text'}">${code.trim()}</code></pre>`
-  })
-
-  // Unordered lists
-  html = html.replace(/^\* (.+)$/gm, '<li>$1</li>')
-  html = html.replace(/^- (.+)$/gm, '<li>$1</li>')
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
-    return `<ul>${match}</ul>`
-  })
-
-  // Ordered lists
-  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => {
-    // Check if this is already wrapped in ul
-    if (match.includes('<ul>')) return match
-    // Check if this looks like an ordered list
-    return `<ol>${match}</ol>`
-  })
-
-  // Blockquotes
-  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-
-  // Line breaks
-  html = html.replace(/\n\n/g, '</p><p>')
-  html = `<p>${html}</p>`
-
-  // Clean up empty paragraphs
-  html = html.replace(/<p>\s*<\/p>/g, '')
-  html = html.replace(/<p>(<h[1-6]>)/g, '$1')
-  html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1')
-  html = html.replace(/<p>(<ul>|<ol>|<blockquote>|<pre>)/g, '$1')
-  html = html.replace(/(<\/ul>|<\/ol>|<\/blockquote>|<\/pre>)<\/p>/g, '$1')
-
-  return html
+    return sanitizedHtml
+  } catch (error) {
+    console.error('Error formatting markdown:', error)
+    // Fallback to plain text if markdown parsing fails
+    return text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
 }
 
 /**

@@ -42,6 +42,7 @@
 <script setup lang="ts">
 import type { ChatMessage } from '~/types/chat'
 import { formatTime, formatMarkdown } from '~/utils/formatters'
+import 'highlight.js/styles/github-dark.css'
 
 interface Props {
   message: ChatMessage
@@ -208,15 +209,77 @@ const handleEdit = () => {
   @apply text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300;
 }
 
-.message-content :deep(table) {
-  @apply w-full border-collapse my-2;
+/* Table wrapper for horizontal scroll */
+.message-content :deep(.table-wrapper) {
+  @apply overflow-x-auto my-4 rounded-lg shadow-sm;
+  @apply border border-gray-200 dark:border-gray-700;
 }
 
-.message-content :deep(th) {
-  @apply bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 px-2 py-1 text-left;
+/* Enhanced table styling */
+.message-content :deep(table.markdown-table) {
+  @apply w-full border-collapse text-sm;
+  @apply bg-white dark:bg-gray-800;
+  min-width: 600px; /* Ensure table has minimum width for readability */
 }
 
-.message-content :deep(td) {
-  @apply border border-gray-300 dark:border-gray-600 px-2 py-1;
+.message-content :deep(table.markdown-table thead) {
+  @apply bg-blue-50 dark:bg-blue-900/30;
+  @apply sticky top-0 z-10;
+}
+
+.message-content :deep(table.markdown-table th) {
+  @apply font-semibold text-left;
+  @apply px-4 py-3;
+  @apply border-b-2 border-blue-200 dark:border-blue-700;
+  @apply text-gray-900 dark:text-gray-100;
+  @apply whitespace-nowrap;
+}
+
+.message-content :deep(table.markdown-table tbody tr) {
+  @apply transition-colors duration-150;
+  @apply border-b border-gray-200 dark:border-gray-700;
+}
+
+.message-content :deep(table.markdown-table tbody tr:nth-child(even)) {
+  @apply bg-gray-50/50 dark:bg-gray-700/30;
+}
+
+.message-content :deep(table.markdown-table tbody tr:hover) {
+  @apply bg-blue-50/50 dark:bg-blue-900/20;
+}
+
+.message-content :deep(table.markdown-table td) {
+  @apply px-4 py-3;
+  @apply text-gray-700 dark:text-gray-300;
+}
+
+.message-content :deep(table.markdown-table tbody tr:last-child) {
+  @apply border-b-0;
+}
+
+/* Code block styling (syntax highlighted) */
+.message-content :deep(pre) {
+  @apply bg-gray-900 dark:bg-black p-4 rounded-lg overflow-x-auto mb-4;
+  @apply border border-gray-700;
+}
+
+.message-content :deep(pre code.hljs) {
+  @apply bg-transparent p-0 text-sm;
+  @apply font-mono;
+}
+
+/* Inline code styling */
+.message-content :deep(code:not(.hljs)) {
+  @apply bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded text-sm;
+  @apply font-mono text-pink-600 dark:text-pink-400;
+}
+
+/* Improve spacing for better readability */
+.message-content :deep(p + .table-wrapper) {
+  @apply mt-3;
+}
+
+.message-content :deep(.table-wrapper + p) {
+  @apply mt-3;
 }
 </style>
