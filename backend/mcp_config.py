@@ -48,7 +48,7 @@ def get_netbox_mcp_config(config: Config) -> dict[str, Any]:
                 "--directory",
                 "/home/ola/dev/rnd/mcp/testmcp/netbox-mcp-server",
                 "run",
-                "server.py",
+                "netbox-mcp-server",
             ],
             "env": {
                 "NETBOX_URL": config.netbox_url,
@@ -72,9 +72,11 @@ def get_allowed_netbox_tools() -> list[str]:
         - mcp__netbox__netbox_get_objects
         - mcp__netbox__netbox_get_object_by_id
         - mcp__netbox__netbox_get_changelogs
+        - mcp__netbox__netbox_search_objects (v1.0.0+)
     """
     return [
         "mcp__netbox__netbox_get_objects",
         "mcp__netbox__netbox_get_object_by_id",
         "mcp__netbox__netbox_get_changelogs",
+        "mcp__netbox__netbox_search_objects",
     ]

@@ -14,8 +14,8 @@ export default defineNuxtConfig({
   // Runtime configuration
   runtimeConfig: {
     public: {
-      wsUrl: process.env.NUXT_PUBLIC_WS_URL || 'ws://localhost:8001/ws/chat',
-      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:8001'
+      wsUrl: process.env.NUXT_PUBLIC_WS_URL || 'ws://localhost:8002/ws/chat',
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:8002'
     }
   },
 
