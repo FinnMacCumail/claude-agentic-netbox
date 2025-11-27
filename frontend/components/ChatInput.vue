@@ -12,15 +12,26 @@
       ></textarea>
       <div class="chat-input-actions">
         <span class="input-hint">{{ hint }}</span>
-        <button
-          type="submit"
-          :disabled="!canSend"
-          class="send-button"
-          :class="{ 'send-button-disabled': !canSend }"
-        >
-          <span v-if="isProcessing">Sending...</span>
-          <span v-else>Send</span>
-        </button>
+        <div class="button-group">
+          <button
+            v-if="editMode"
+            type="button"
+            @click="handleCancel"
+            class="cancel-button"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            :disabled="!canSend"
+            class="send-button"
+            :class="{ 'send-button-disabled': !canSend }"
+          >
+            <span v-if="isProcessing">Sending...</span>
+            <span v-else-if="editMode">Update</span>
+            <span v-else>Send</span>
+          </button>
+        </div>
       </div>
     </form>
   </div>
@@ -31,16 +42,22 @@ interface Props {
   disabled?: boolean
   isProcessing?: boolean
   placeholder?: string
+  editMode?: boolean
+  initialValue?: string
 }
 
 interface Emits {
   (e: 'send', message: string): void
+  (e: 'update', message: string): void
+  (e: 'cancel'): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   isProcessing: false,
-  placeholder: 'Ask about your Netbox infrastructure...'
+  placeholder: 'Ask about your Netbox infrastructure...',
+  editMode: false,
+  initialValue: ''
 })
 
 const emit = defineEmits<Emits>()
@@ -66,13 +83,22 @@ const hint = computed(() => {
 
 const handleSubmit = () => {
   if (canSend.value) {
-    emit('send', message.value.trim())
+    if (props.editMode) {
+      emit('update', message.value.trim())
+    } else {
+      emit('send', message.value.trim())
+    }
     message.value = ''
     // Focus textarea after sending
     nextTick(() => {
       textareaRef.value?.focus()
     })
   }
+}
+
+const handleCancel = () => {
+  message.value = ''
+  emit('cancel')
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {
@@ -82,6 +108,18 @@ const handleKeyDown = (event: KeyboardEvent) => {
     handleSubmit()
   }
 }
+
+// Watch for edit mode changes and populate with initial value
+watch(() => props.editMode, (isEditing) => {
+  if (isEditing && props.initialValue) {
+    message.value = props.initialValue
+    nextTick(() => {
+      textareaRef.value?.focus()
+      // Select all text for easy editing
+      textareaRef.value?.select()
+    })
+  }
+})
 
 // Auto-focus on mount
 onMounted(() => {
@@ -118,6 +156,10 @@ onMounted(() => {
   @apply text-sm text-gray-500 dark:text-gray-400;
 }
 
+.button-group {
+  @apply flex gap-2;
+}
+
 .send-button {
   @apply px-4 py-2 bg-blue-600 text-white rounded-lg font-medium;
   @apply hover:bg-blue-700 active:bg-blue-800 transition-colors;
@@ -127,5 +169,11 @@ onMounted(() => {
 .send-button-disabled {
   @apply bg-gray-400 dark:bg-gray-600 cursor-not-allowed;
   @apply hover:bg-gray-400 dark:hover:bg-gray-600;
+}
+
+.cancel-button {
+  @apply px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium;
+  @apply hover:bg-gray-300 dark:hover:bg-gray-600 active:bg-gray-400 dark:active:bg-gray-500 transition-colors;
+  @apply focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2;
 }
 </style>

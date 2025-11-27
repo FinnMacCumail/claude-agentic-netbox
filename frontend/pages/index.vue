@@ -45,13 +45,16 @@
           :is-processing="isProcessing"
           :partial-message="partialMessage"
           @edit="handleEditMessage"
-          @regenerate="handleRegenerateMessage"
         />
 
         <ChatInput
           :disabled="!connectionState.connected"
           :is-processing="isProcessing"
+          :edit-mode="editingMessageIndex !== null"
+          :initial-value="editingContent"
           @send="handleSendMessage"
+          @update="handleUpdateMessage"
+          @cancel="handleCancelEdit"
         />
       </main>
     </div>
@@ -76,6 +79,7 @@ const {
   connect,
   disconnect,
   sendMessage,
+  sendMessageOnly,
   clearMessages,
   loadMessages,
   resetSession
@@ -97,6 +101,10 @@ const sidebarOpen = ref(false)
 
 // Loading state to prevent watch conflicts
 const isLoadingMessages = ref(false)
+
+// Edit mode state
+const editingMessageIndex = ref<number | null>(null)
+const editingContent = ref('')
 
 // SEO metadata
 useHead({
@@ -237,23 +245,70 @@ const handleNewConversation = () => {
  * Handle edit message action.
  */
 const handleEditMessage = (message: ChatMessage) => {
-  // TODO: Implement edit functionality
-  // This would populate the input with the message content for editing
-  console.log('Edit message:', message)
+  console.log('📝 Editing message:', message.content.substring(0, 50))
+
+  // Find the message index in the messages array
+  const index = allMessages.value.findIndex(
+    m => m.timestamp === message.timestamp && m.role === 'user'
+  )
+
+  if (index === -1) {
+    console.error('❌ Message not found for editing')
+    return
+  }
+
+  // Set editing state
+  editingMessageIndex.value = index
+  editingContent.value = message.content
+  console.log('✅ Edit mode activated for message at index:', index)
 }
 
 /**
- * Handle regenerate message action.
+ * Handle updating an edited message.
  */
-const handleRegenerateMessage = (message: ChatMessage) => {
-  // TODO: Implement regenerate functionality
-  // This would resend the user message to get a new response
-  console.log('Regenerate response for:', message)
-
-  // For now, just resend the message
-  if (sendMessage(message.content)) {
-    console.log('Regenerating response...')
+const handleUpdateMessage = (newContent: string) => {
+  if (editingMessageIndex.value === null) {
+    console.error('❌ No message being edited')
+    return
   }
+
+  console.log('💾 Updating message at index:', editingMessageIndex.value)
+
+  // Create a copy of messages and update the edited message
+  const updatedMessages = [...messages.value]
+  updatedMessages[editingMessageIndex.value] = {
+    ...updatedMessages[editingMessageIndex.value],
+    content: newContent
+  }
+
+  // Remove all messages after the edited one (context has changed)
+  const messagesToKeep = updatedMessages.slice(0, editingMessageIndex.value + 1)
+
+  // Update the messages in the composable
+  loadMessages(messagesToKeep)
+
+  // Update conversation storage
+  if (activeConversationId.value) {
+    updateConversation(activeConversationId.value, messagesToKeep)
+    console.log('✅ Conversation updated with edited message')
+  }
+
+  // Send the edited message to get a new response (without adding to array again)
+  sendMessageOnly(newContent)
+
+  // Clear editing state
+  editingMessageIndex.value = null
+  editingContent.value = ''
+  console.log('✅ Edit mode deactivated')
+}
+
+/**
+ * Handle canceling an edit.
+ */
+const handleCancelEdit = () => {
+  console.log('🚫 Edit canceled')
+  editingMessageIndex.value = null
+  editingContent.value = ''
 }
 
 /**

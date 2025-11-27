@@ -25,7 +25,6 @@
         :key="`message-${index}`"
         :message="message"
         @edit="$emit('edit', $event)"
-        @regenerate="$emit('regenerate', $event)"
       />
 
       <!-- Loading indicator -->
@@ -57,7 +56,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<{
   edit: [message: ChatMessage]
-  regenerate: [message: ChatMessage]
 }>()
 
 const historyContainer = ref<HTMLElement>()

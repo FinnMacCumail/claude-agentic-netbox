@@ -33,7 +33,7 @@ export interface ChatResponse {
  * Streaming response chunk from the WebSocket.
  */
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error'
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'connected' | 'reset_complete'
   content: string
   completed: boolean
 }

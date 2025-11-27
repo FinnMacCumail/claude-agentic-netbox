@@ -190,6 +190,39 @@ export const useChatSocket = () => {
   }
 
   /**
+   * Send a message via WebSocket without adding it to the messages array.
+   * Useful for sending edited messages where the message is already in the array.
+   */
+  const sendMessageOnly = (message: string) => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket is not connected')
+      connectionState.value.error = 'Not connected to server'
+      return false
+    }
+
+    if (!message.trim()) {
+      return false
+    }
+
+    try {
+      // Send message via WebSocket (don't add to array)
+      const wsMessage: WebSocketMessage = { message }
+      socket.value.send(JSON.stringify(wsMessage))
+
+      // Set processing state
+      isProcessing.value = true
+      currentAssistantMessage.value = ''
+
+      return true
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      connectionState.value.error = 'Failed to send message'
+      isProcessing.value = false
+      return false
+    }
+  }
+
+  /**
    * Disconnect from the WebSocket server.
    */
   const disconnect = () => {
@@ -283,6 +316,7 @@ export const useChatSocket = () => {
     connect,
     disconnect,
     sendMessage,
+    sendMessageOnly,
     clearMessages,
     loadMessages,
     resetSession
