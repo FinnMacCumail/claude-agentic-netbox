@@ -1,19 +1,35 @@
 # Netbox Chatbox - AI-Powered Netbox Query Interface
 
-A natural language interface for querying Netbox infrastructure data using Claude AI and the Claude Agent SDK.
+A full-stack natural language interface for querying Netbox infrastructure data using Claude AI and the Claude Agent SDK.
+
+![Main Interface](docs/screenshots/main-interface.png)
 
 ## Features
 
+### Core Capabilities
 - **Natural Language Queries**: Ask questions about your Netbox data in plain English
 - **Real-time Streaming**: WebSocket-based streaming responses for instant feedback
 - **MCP Integration**: Uses Netbox MCP server for secure, structured API access
 - **Continuous Conversations**: Maintains context across multiple queries
-- **Type-Safe**: Built with Pydantic models and comprehensive type hints
-- **Well-Tested**: 59 unit tests covering all functionality
+
+### Web Interface (New!)
+- **Modern Chat UI**: Full-featured web interface built with Nuxt 3
+- **Conversation Management**: Multiple conversations with sidebar navigation
+- **Message Editing**: Edit and re-send previous messages
+- **Professional Tables**: Syntax-highlighted table rendering for structured data
+- **Session Reset**: Clear conversation context without losing history
+- **Auto-reconnect**: Automatic WebSocket reconnection with exponential backoff
+
+### Developer Experience
+- **CLI Tool**: Interactive command-line interface with REPL mode
+- **Type-Safe**: Built with Pydantic models and TypeScript
+- **Well-Tested**: 83+ unit tests covering all functionality
+- **MCP v1.1 Compatible**: Enhanced field filtering and API patterns
 
 ## Prerequisites
 
 - Python 3.13+
+- Node.js 18+ (for web interface)
 - uv (Python package manager)
 - Running Netbox instance with API access
 - Anthropic API key
@@ -23,51 +39,69 @@ A natural language interface for querying Netbox infrastructure data using Claud
 ### 1. Clone and Setup
 
 ```bash
-cd /home/ola/dev/netboxdev/claude-agentic-sdk
+git clone https://github.com/YOUR_USERNAME/netbox-chatbox.git
+cd netbox-chatbox
+
+# Install backend dependencies
 uv sync
+
+# Install frontend dependencies
+cd frontend
+npm install
+cp .env.example .env  # Frontend WebSocket configuration
+cd ..
 ```
 
 ### 2. Configure Environment
 
-Create a `.env` file:
 ```bash
-# Anthropic API Configuration
-ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
+# Copy environment template
+cp .env.example .env
 
-# Netbox Configuration
-NETBOX_URL=http://localhost:8000
-NETBOX_TOKEN=your-netbox-api-token-here
-
-# Application Configuration
-LOG_LEVEL=INFO
-CORS_ORIGINS=http://localhost:3000
+# Edit .env with your values:
+# - ANTHROPIC_API_KEY: Your Claude API key
+# - NETBOX_URL: Your Netbox instance URL
+# - NETBOX_TOKEN: Your Netbox API token
 ```
 
-### 3. Start the Server
+### 3. Start the Application
 
+**Terminal 1 - Backend:**
 ```bash
 ./start_server.sh
+# Server starts on http://localhost:8001
 ```
 
-The server will start on `http://localhost:8001`.
-
-### 4. Verify It's Working
-
+**Terminal 2 - Frontend:**
 ```bash
-uv run python verify_fix.py
+cd frontend
+npm run dev
+# UI available at http://localhost:3000
 ```
 
-You should see:
-```
-✅ SUCCESS: MCP 403 error is FIXED!
-   The Netbox MCP tools are working correctly.
-```
+### 4. Open the Web Interface
+
+Navigate to `http://localhost:3000` and start chatting with your Netbox data!
+
+![Table Rendering](docs/screenshots/table-rendering.png)
 
 ## Usage
 
-### CLI Tool (Recommended)
+### Web Interface (Recommended)
 
-The easiest way to query Netbox is using the command-line interface:
+The easiest way to interact with Netbox is through the web interface at `http://localhost:3000`. Features include:
+
+- **Chat Interface**: Natural language queries with real-time responses
+- **Conversation Management**: Create, switch between, and manage multiple conversations
+- **Message Editing**: Edit and re-send previous messages
+- **Session Reset**: Clear Claude's context while preserving chat history
+- **Professional Tables**: Beautifully formatted data tables with syntax highlighting
+
+![Edit Message Feature](docs/screenshots/edit-message.png)
+
+### CLI Tool
+
+For command-line usage, the CLI provides both interactive and one-shot modes:
 
 #### Single Query Mode
 
@@ -188,8 +222,16 @@ backend/
 ├── models.py       # Pydantic data models
 └── utils.py        # Helper functions
 
+frontend/
+├── components/     # Vue components (chat UI)
+├── composables/    # WebSocket connection logic
+├── pages/          # Main chat interface
+├── types/          # TypeScript definitions
+└── utils/          # Formatting utilities
+
 tests/              # Pytest unit tests (83 tests)
 netbox_cli.py       # Interactive CLI tool
+docs/               # Documentation and screenshots
 ```
 
 ### Key Design Patterns
@@ -317,16 +359,18 @@ The Netbox MCP server is configured in [backend/mcp_config.py](backend/mcp_confi
 
 ## Future Enhancements
 
-See `docs/development/TASK.md` for planned features:
-- Frontend UI (Nuxt.js)
-- Enhanced error handling
-- Query history and favorites
-- Multi-user support
-- Advanced filtering and search
+See `docs/development/TASK.md` for potential improvements:
+- User authentication (OAuth, JWT)
+- Query history export/import
+- Multi-user support with separate sessions
+- Advanced filtering and search operators
+- Docker containerization
+- Kubernetes deployment manifests
+- Real-time collaboration features
 
 ## License
 
-[Your License Here]
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## Contributing
 
