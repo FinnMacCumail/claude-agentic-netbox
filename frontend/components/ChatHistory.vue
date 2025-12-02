@@ -29,11 +29,7 @@
 
       <!-- Loading indicator -->
       <div v-if="isProcessing && !partialMessage" class="loading-indicator">
-        <div class="loading-dots">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
+        <LoadingSpinner size="md" aria-label="Assistant is processing" />
         <span class="loading-text">Netbox Assistant is thinking...</span>
       </div>
     </div>
@@ -145,29 +141,8 @@ onMounted(() => {
   @apply flex items-center gap-3 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg mr-8;
 }
 
-.loading-dots {
-  @apply flex gap-1;
-}
-
-.loading-dots span {
-  @apply w-2 h-2 bg-blue-600 dark:bg-blue-400 rounded-full;
-  @apply animate-pulse;
-}
-
-.loading-dots span:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.loading-dots span:nth-child(2) {
-  animation-delay: 150ms;
-}
-
-.loading-dots span:nth-child(3) {
-  animation-delay: 300ms;
-}
-
 .loading-text {
-  @apply text-sm text-gray-600 dark:text-gray-400;
+  @apply text-sm text-gray-600 dark:text-gray-400 font-medium;
 }
 
 /* Custom scrollbar */
