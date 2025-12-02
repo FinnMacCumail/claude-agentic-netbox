@@ -11,7 +11,10 @@
         ref="textareaRef"
       ></textarea>
       <div class="chat-input-actions">
-        <span class="input-hint">{{ hint }}</span>
+        <div class="input-hint">
+          <LoadingSpinner v-if="isProcessing" size="sm" aria-label="Processing message" />
+          <span>{{ hint }}</span>
+        </div>
         <div class="button-group">
           <button
             v-if="editMode"
@@ -153,6 +156,7 @@ onMounted(() => {
 }
 
 .input-hint {
+  @apply flex items-center gap-2;
   @apply text-sm text-gray-500 dark:text-gray-400;
 }
 
