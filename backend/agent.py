@@ -37,22 +37,33 @@ class ChatAgent:
         options: Claude Agent configuration options.
         client: Claude SDK client instance (active during session).
         session_active: Whether a session is currently active.
+        model: Optional explicit model selection.
     """
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, model: str | None = None) -> None:
         """
-        Initialize agent with configuration.
+        Initialize agent with configuration and optional model specification.
 
         Args:
             config: Application configuration with Netbox credentials.
+            model: Optional explicit model (e.g., "claude-sonnet-4-5-20250929").
+                   If None, SDK uses automatic routing (Haiku/Sonnet/Opus).
 
         Example:
             >>> config = Config()
-            >>> agent = ChatAgent(config)
+            >>> # Automatic routing (recommended)
+            >>> agent = ChatAgent(config, model=None)
+            >>> # Explicit model
+            >>> agent = ChatAgent(config, model="claude-sonnet-4-5-20250929")
             >>> await agent.start_session()
         """
-        # PATTERN: Configure ClaudeAgentOptions with MCP servers
+        self.model = model
+        self.config = config
+
+        # PATTERN: Configure ClaudeAgentOptions with MCP servers and model
         self.options = ClaudeAgentOptions(
+            model=model,  # KEY: Explicit model or None for automatic
+            fallback_model=None,  # No fallback for explicit model selection
             mcp_servers=get_netbox_mcp_config(config),
             allowed_tools=get_allowed_netbox_tools(),
             system_prompt={
@@ -185,7 +196,7 @@ class ChatAgent:
                                 completed=False,
                             )
                         elif isinstance(block, ToolResultBlock):
-                            # Tool result available
+                            # Tool result available - for display purposes (Claude synthesizes these)
                             if block.content:
                                 result_text = (
                                     block.content
@@ -197,12 +208,6 @@ class ChatAgent:
                                     if len(result_text) > 100
                                     else f"Tool result: {result_text}"
                                 )
-                                # Don't stream tool results to user, Claude will process them
-                                # yield StreamChunk(
-                                #     type="tool_result",
-                                #     content=result_text,
-                                #     completed=False
-                                # )
 
                 elif isinstance(msg, ResultMessage):
                     # Final result - conversation turn complete
@@ -239,3 +244,16 @@ class ChatAgent:
                 self.client = None
         else:
             logger.debug("No active session to close")
+
+    def get_model_info(self) -> dict:
+        """
+        Get information about the current model.
+
+        Returns:
+            dict: Model information including name and routing mode
+        """
+        return {
+            "model": self.model if self.model else "automatic",
+            "model_display": self.model if self.model else "Claude (Automatic Selection)",
+            "is_automatic": self.model is None,
+        }

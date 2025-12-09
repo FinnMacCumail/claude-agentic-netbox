@@ -33,9 +33,13 @@ export interface ChatResponse {
  * Streaming response chunk from the WebSocket.
  */
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'connected' | 'reset_complete'
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'connected' | 'reset_complete' | 'model_changed'
   content: string
   completed: boolean
+  metadata?: {
+    model?: ModelInfo | any
+    archived_messages?: ChatMessage[]
+  }
 }
 
 /**
@@ -70,5 +74,27 @@ export interface HealthResponse {
  * Message to send via WebSocket.
  */
 export interface WebSocketMessage {
-  message: string
+  message?: string
+  type?: 'message' | 'reset' | 'model_change'
+  model?: string
+}
+
+/**
+ * Model information from the API.
+ */
+export interface ModelInfo {
+  id: string
+  name: string
+  provider: string
+  available: boolean
+}
+
+/**
+ * Model selection state.
+ */
+export interface ModelSelectionState {
+  selectedModel: string
+  availableModels: ModelInfo[]
+  isLoading: boolean
+  error: string | null
 }

@@ -19,6 +19,8 @@ export const useChatSocket = () => {
   })
   const currentAssistantMessage = ref<string>('')
   const isProcessing = ref(false)
+  const currentModel = ref<string>('auto')
+  const archivedMessages = ref<ChatMessage[]>([])
 
   // Configuration
   const MAX_RECONNECT_ATTEMPTS = 5
@@ -44,6 +46,16 @@ export const useChatSocket = () => {
         connectionState.value.connecting = false
         connectionState.value.reconnectAttempts = 0
         connectionState.value.error = null
+
+        // Restore selected model after reconnection
+        const { selectedModel } = useModelSelection()
+        if (selectedModel.value && selectedModel.value !== 'auto') {
+          console.log(`Restoring model selection: ${selectedModel.value}`)
+          // Small delay to ensure connection is ready
+          setTimeout(() => {
+            switchModel(selectedModel.value)
+          }, 100)
+        }
       }
 
       socket.value.onmessage = (event) => {
@@ -113,9 +125,17 @@ export const useChatSocket = () => {
         break
 
       case 'tool_result':
-        // Tool results are usually internal, but we can show them if needed
+        // Display tool results (especially helpful for Ollama models)
         if (!chunk.completed && chunk.content) {
-          currentAssistantMessage.value += `\n📊 Tool result received\n`
+          try {
+            // Try to parse as JSON for nice formatting
+            const parsed = JSON.parse(chunk.content)
+            const formatted = JSON.stringify(parsed, null, 2)
+            currentAssistantMessage.value += `\n\n📊 **Tool Result:**\n\`\`\`json\n${formatted}\n\`\`\`\n`
+          } catch {
+            // Not JSON, display as-is
+            currentAssistantMessage.value += `\n\n📊 **Tool Result:**\n\`\`\`\n${chunk.content}\n\`\`\`\n`
+          }
         }
         break
 
@@ -144,8 +164,31 @@ export const useChatSocket = () => {
         break
 
       case 'connected':
-        // Initial connection message
+        // Initial connection message with model info
         console.log('Connected:', chunk.content)
+        if (chunk.metadata?.model) {
+          currentModel.value = chunk.metadata.model.id || chunk.metadata.model.model || 'auto'
+          console.log('Current model:', currentModel.value)
+        }
+        break
+
+      case 'model_changed':
+        // Handle model switch confirmation
+        console.log('Model changed:', chunk.content)
+        if (chunk.metadata?.model) {
+          currentModel.value = chunk.metadata.model.id || chunk.metadata.model.model || 'auto'
+        }
+        if (chunk.metadata?.archived_messages) {
+          archivedMessages.value = chunk.metadata.archived_messages
+        }
+        // Clear current messages on model switch
+        clearMessages()
+        // Add a system message about the model switch
+        messages.value.push({
+          role: 'assistant',
+          content: chunk.content,
+          timestamp: new Date().toISOString()
+        })
         break
     }
   }
@@ -276,6 +319,32 @@ export const useChatSocket = () => {
   }
 
   /**
+   * Switch to a different model.
+   */
+  const switchModel = (modelId: string) => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket is not connected')
+      connectionState.value.error = 'Not connected to server'
+      return false
+    }
+
+    try {
+      // Send model change message to backend
+      const message: WebSocketMessage = {
+        type: 'model_change',
+        model: modelId
+      }
+      socket.value.send(JSON.stringify(message))
+      console.log(`🔄 Switching to model: ${modelId}`)
+      return true
+    } catch (error) {
+      console.error('Failed to send model switch request:', error)
+      connectionState.value.error = 'Failed to switch model'
+      return false
+    }
+  }
+
+  /**
    * Get the current partial assistant message (for live streaming display).
    */
   const partialMessage = computed(() => currentAssistantMessage.value)
@@ -311,6 +380,8 @@ export const useChatSocket = () => {
     partialMessage,
     connectionState: readonly(connectionState),
     isProcessing: readonly(isProcessing),
+    currentModel: readonly(currentModel),
+    archivedMessages: readonly(archivedMessages),
 
     // Actions
     connect,
@@ -319,6 +390,7 @@ export const useChatSocket = () => {
     sendMessageOnly,
     clearMessages,
     loadMessages,
-    resetSession
+    resetSession,
+    switchModel
   }
 }

@@ -14,6 +14,7 @@ A full-stack natural language interface for querying Netbox infrastructure data 
 
 ### Web Interface (New!)
 - **Modern Chat UI**: Full-featured web interface built with Nuxt 3
+- **Model Selection**: Choose between Claude models (Auto, Haiku, Sonnet, Opus) with intelligent routing
 - **Conversation Management**: Multiple conversations with sidebar navigation
 - **Message Editing**: Edit and re-send previous messages
 - **Professional Tables**: Syntax-highlighted table rendering for structured data
@@ -92,6 +93,7 @@ Navigate to `http://localhost:3000` and start chatting with your Netbox data!
 The easiest way to interact with Netbox is through the web interface at `http://localhost:3000`. Features include:
 
 - **Chat Interface**: Natural language queries with real-time responses
+- **Model Selection**: Switch between Claude models (Auto, Haiku, Sonnet, Opus) - see [Model Selection Guide](docs/MODEL_SELECTION.md)
 - **Conversation Management**: Create, switch between, and manage multiple conversations
 - **Message Editing**: Edit and re-send previous messages
 - **Session Reset**: Clear Claude's context while preserving chat history
@@ -271,21 +273,38 @@ Most common issue: **MCP 403 Forbidden Error**
 
 Bidirectional streaming chat interface.
 
-**Client → Server:**
+**Client → Server - Message:**
 ```json
 {
   "message": "your query here"
 }
 ```
 
+**Client → Server - Model Change:**
+```json
+{
+  "type": "model_change",
+  "model": "claude-sonnet-4-5-20250929"
+}
+```
+
 **Server → Client:**
 ```json
 {
-  "type": "text|tool_use|error",
+  "type": "text|tool_use|error|model_changed",
   "content": "response content",
-  "completed": false|true
+  "completed": false|true,
+  "metadata": {
+    "model": {
+      "model": "claude-sonnet-4-5-20250929",
+      "model_display": "Claude Sonnet 4.5",
+      "is_automatic": false
+    }
+  }
 }
 ```
+
+See [Model Selection Guide](docs/MODEL_SELECTION.md) for details on intelligent routing.
 
 ### GET `/health`
 
@@ -298,6 +317,40 @@ Health check endpoint.
   "service": "netbox-chatbox-api",
   "version": "0.1.0"
 }
+```
+
+### GET `/models`
+
+Get available Claude models.
+
+**Response:**
+```json
+[
+  {
+    "id": "auto",
+    "name": "Claude (Automatic Selection)",
+    "provider": "anthropic",
+    "available": true
+  },
+  {
+    "id": "claude-sonnet-4-5-20250929",
+    "name": "Claude Sonnet 4.5",
+    "provider": "anthropic",
+    "available": true
+  },
+  {
+    "id": "claude-opus-4-20250514",
+    "name": "Claude Opus 4",
+    "provider": "anthropic",
+    "available": true
+  },
+  {
+    "id": "claude-haiku-4-5-20250925",
+    "name": "Claude Haiku 4.5",
+    "provider": "anthropic",
+    "available": true
+  }
+]
 ```
 
 ## Development

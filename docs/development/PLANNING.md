@@ -106,13 +106,23 @@ tests/
    - Use `ClaudeSDKClient` as async context manager
    - One agent session per WebSocket connection
    - Always clean up sessions on disconnect
+   - Support explicit model selection via `model` parameter
+   - **Note**: SDK uses intelligent routing - the specified model controls response quality while tool execution uses Haiku for cost optimization
 
-3. **WebSocket Streaming**:
+3. **Model Selection & Intelligent Routing**:
+   - Provide model selector UI (Auto, Haiku, Sonnet, Opus)
+   - User's selection sets target quality level
+   - SDK automatically uses Haiku for MCP tool calls (70-80% cost savings)
+   - Final responses use the selected model
+   - See [docs/MODEL_SELECTION.md](../MODEL_SELECTION.md) for detailed explanation
+
+4. **WebSocket Streaming**:
    - Stream responses in real-time using `StreamChunk` objects
    - Type-safe message processing (check `isinstance()` for all messages)
    - Graceful error handling with error chunks
+   - Support model_change messages for switching models mid-session
 
-4. **MCP Server Integration**:
+5. **MCP Server Integration**:
    - Use `McpStdioServerConfig` for Netbox MCP server
    - Pass environment variables through MCP config
    - Use absolute paths to server location

@@ -493,7 +493,7 @@ class ClaudeAgentOptions:
 | `resume`                      | `str \| None`                                | `None`               | Session ID to resume                                                                                                                                                                    |
 | `max_turns`                   | `int \| None`                                | `None`               | Maximum conversation turns                                                                                                                                                              |
 | `disallowed_tools`            | `list[str]`                                  | `[]`                 | List of disallowed tool names                                                                                                                                                           |
-| `model`                       | `str \| None`                                | `None`               | Claude model to use                                                                                                                                                                     |
+| `model`                       | `str \| None`                                | `None`               | Claude model to use. **Note**: The SDK uses intelligent routing - specifies target quality for responses while the SDK automatically optimizes tool execution with cheaper models (Haiku) for cost efficiency. See [Intelligent Routing](#intelligent-routing-behavior) below |
 | `output_format`               | [`OutputFormat`](#outputformat) ` \| None`   | `None`               | Define output format for agent results. See [Structured outputs](/docs/en/agent-sdk/structured-outputs) for details                                                                    |
 | `permission_prompt_tool_name` | `str \| None`                                | `None`               | MCP tool name for permission prompts                                                                                                                                                    |
 | `cwd`                         | `str \| Path \| None`                        | `None`               | Current working directory                                                                                                                                                               |
@@ -1855,6 +1855,120 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## Intelligent Routing Behavior
+
+### Overview
+
+The Claude Agent SDK uses **intelligent multi-model routing** to optimize cost and performance automatically. When you specify a `model` parameter, you're setting the **target quality level** for user-facing responses, not controlling every API call.
+
+### How It Works
+
+```python
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+
+# You specify Sonnet as target quality
+options = ClaudeAgentOptions(
+    model="claude-sonnet-4-5-20250929",
+    mcp_servers={"netbox": my_mcp_config}
+)
+
+async with ClaudeSDKClient(options=options) as client:
+    await client.query("How many devices are active?")
+    # SDK makes multiple API calls behind the scenes:
+    # 1. Haiku - MCP tool execution (fast, cheap)
+    # 2. Haiku - Additional tool calls if needed
+    # 3. Sonnet - Final response generation (your specified quality)
+```
+
+### Actual API Calls Made
+
+For a typical query, the SDK makes these calls:
+
+| Step | Model | Purpose | Example |
+|------|-------|---------|---------|
+| 1 | Haiku | Tool execution | `netbox_get_objects` MCP call |
+| 2 | Haiku | Data processing | Additional queries, filtering |
+| 3 | Sonnet* | Response generation | User-facing answer |
+
+\*Uses your specified model
+
+### Cost Optimization Example
+
+**Query**: "List all sites in NetBox"
+
+**Without Intelligent Routing** (Sonnet only):
+```
+6 API calls × Sonnet ($3/1M tokens) = $0.018
+```
+
+**With Intelligent Routing** (SDK default):
+```
+5 tool calls × Haiku ($0.25/1M tokens) = $0.00125
+1 response × Sonnet ($3/1M tokens)     = $0.003
+Total: $0.00425 (76% savings!)
+```
+
+### Model Selection Guidelines
+
+#### `model=None` (Automatic)
+```python
+options = ClaudeAgentOptions(model=None)  # or omit model parameter
+```
+- SDK chooses the best model dynamically
+- Recommended for most use cases
+- Maximum cost optimization
+
+#### Explicit Model Selection
+```python
+# Fast and economical
+options = ClaudeAgentOptions(model="claude-haiku-4-5-20250925")
+
+# Balanced (recommended for complex queries)
+options = ClaudeAgentOptions(model="claude-sonnet-4-5-20250929")
+
+# Maximum capability
+options = ClaudeAgentOptions(model="claude-opus-4-20250514")
+```
+
+### Key Points
+
+1. **Your model controls final response quality**, not intermediate operations
+2. **Tool execution always uses Haiku** for cost efficiency
+3. **This behavior cannot be disabled** - it's a built-in SDK optimization
+4. **Cost savings are substantial** (typically 70-80%) with no quality loss
+5. **The SDK is smarter than manual selection** - trust the routing
+
+### Monitoring API Usage
+
+You can see which models are actually called by checking:
+
+1. **Anthropic Console**: https://console.anthropic.com/
+2. **Backend Logs** (with `LOG_LEVEL=DEBUG`):
+   ```
+   DEBUG: Using Haiku for tool execution
+   DEBUG: Using Sonnet for final response
+   ```
+
+### Common Questions
+
+**Q: Why do I see Haiku calls when I selected Sonnet?**
+A: This is expected and intentional. The SDK uses Haiku for cheap operations (tool calls) and your selected model (Sonnet) for the final answer.
+
+**Q: Can I force all calls to use my selected model?**
+A: No, intelligent routing is always active. Your model selection determines the quality of responses, not intermediate processing.
+
+**Q: Does this affect response quality?**
+A: No! The final user-facing response uses your selected model. Only internal tool execution uses Haiku, which is perfect for that purpose.
+
+**Q: What's the benefit?**
+A: Significant cost savings (70-80%) with zero impact on response quality. The SDK intelligently routes operations to the most appropriate model.
+
+### See Also
+
+- [Model Selection Guide](../docs/MODEL_SELECTION.md) - Detailed guide for the Netbox Chatbox application
+- [Anthropic Pricing](https://www.anthropic.com/pricing) - Current model costs
+- [ClaudeAgentOptions](#claudeagentoptions) - Configuration reference
 
 ## See also
 

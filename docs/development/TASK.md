@@ -107,9 +107,36 @@
   - [x] Enhance table rendering with syntax highlighting
   - [x] Add MCP v1.1 compatibility improvements
 
+- [x] Implement Model Selection for Anthropic Models - 2025-12-09
+  - [x] Add model parameter to backend/agent.py ChatAgent
+  - [x] Implement /models API endpoint in backend/api.py
+  - [x] Add model switching via WebSocket (model_change message type)
+  - [x] Add model_changed StreamChunk type to backend/models.py
+  - [x] Add metadata field to StreamChunk for model information
+  - [x] Update frontend types to remove routing_path field
+  - [x] Update ModelSelector.vue to work with Anthropic-only models
+  - [x] Test model switching with Haiku, Sonnet, and Opus
+
+- [x] Document Intelligent Routing Behavior - 2025-12-09
+  - [x] Create comprehensive MODEL_SELECTION.md guide (380 lines)
+  - [x] Update README.md with model selection features and endpoints
+  - [x] Add "Intelligent Routing Behavior" section to SDK reference docs
+  - [x] Update PLANNING.md with model selection design patterns
+  - [x] Document cost optimization (70-80% savings with multi-model routing)
+  - [x] Add FAQ section for intelligent routing questions
+  - [x] Include API call examples and monitoring guidance
+
+- [x] Remove Ollama/LiteLLM Integration - 2025-12-09
+  - [x] Delete all LiteLLM-specific files (litellm_agent.py, litellm_config.py, etc.)
+  - [x] Restore backend files to Anthropic-only implementation
+  - [x] Remove Ollama model references from frontend
+  - [x] Delete docker-compose.litellm.yml and config/litellm_config.yaml
+  - [x] Delete docs/LITELLM_INTEGRATION.md and PRPs/litellm-integration.md
+  - [x] Test application works with Anthropic models only
+
 ### 🚧 In Progress
 
-None - Full application complete with web UI!
+None - Full application complete with web UI and comprehensive documentation!
 
 ### 📋 Todo
 

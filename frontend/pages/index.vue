@@ -30,6 +30,9 @@
           </div>
 
           <div class="flex items-center gap-4">
+            <ModelSelector
+              :on-model-switch="handleModelSwitch"
+            />
             <ConnectionStatus
               :connection-state="connectionState"
               @reconnect="handleReconnect"
@@ -76,13 +79,16 @@ const {
   partialMessage,
   connectionState,
   isProcessing,
+  currentModel,
+  archivedMessages,
   connect,
   disconnect,
   sendMessage,
   sendMessageOnly,
   clearMessages,
   loadMessages,
-  resetSession
+  resetSession,
+  switchModel
 } = useChatSocket()
 
 // Conversations composable
@@ -219,6 +225,22 @@ const handleSendMessage = (message: string) => {
  */
 const handleReconnect = () => {
   connect()
+}
+
+/**
+ * Handle model switching.
+ */
+const handleModelSwitch = (modelId: string) => {
+  console.log('🔄 Switching to model:', modelId)
+
+  // Switch model via WebSocket
+  if (!switchModel(modelId)) {
+    console.error('❌ Failed to switch model')
+    return
+  }
+
+  // The backend will handle the context reset and send model_changed message
+  // which will trigger clearMessages() and archive the old messages
 }
 
 /**

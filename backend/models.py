@@ -96,14 +96,16 @@ class StreamChunk(BaseModel):
     Streaming response chunk sent over WebSocket.
 
     Attributes:
-        type: Type of chunk (text, tool_use, tool_result, thinking, error, connected, reset_complete).
+        type: Type of chunk (text, tool_use, tool_result, thinking, error, connected, reset_complete, model_changed).
         content: Chunk content (text, status message, error message, etc.).
         completed: Whether this is the final chunk of the response.
+        metadata: Optional metadata (model info, etc.).
     """
 
-    type: Literal["text", "tool_use", "tool_result", "thinking", "error", "connected", "reset_complete"]
+    type: Literal["text", "tool_use", "tool_result", "thinking", "error", "connected", "reset_complete", "model_changed"]
     content: str
     completed: bool = False
+    metadata: dict | None = None
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -119,6 +121,12 @@ class StreamChunk(BaseModel):
                     "completed": False,
                 },
                 {"type": "text", "content": "", "completed": True},
+                {
+                    "type": "model_changed",
+                    "content": "Switched to claude-sonnet-4-5",
+                    "completed": False,
+                    "metadata": {"model": "claude-sonnet-4-5-20250929"}
+                },
             ]
         }
     )

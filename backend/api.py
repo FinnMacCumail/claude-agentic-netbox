@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from backend import __version__
 from backend.agent import ChatAgent
@@ -23,6 +24,15 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+# Response models
+class ModelInfo(BaseModel):
+    """Model information response."""
+    id: str
+    name: str
+    provider: str = "anthropic"
+    available: bool = True
 
 
 # Global config instance
@@ -94,6 +104,42 @@ async def health_check() -> HealthResponse:
     )
 
 
+@app.get("/models", response_model=list[ModelInfo])
+async def get_models() -> list[ModelInfo]:
+    """
+    Get available Claude models.
+
+    Returns:
+        list[ModelInfo]: List of available Claude models.
+    """
+    return [
+        ModelInfo(
+            id="auto",
+            name="Claude (Automatic Selection)",
+            provider="anthropic",
+            available=True,
+        ),
+        ModelInfo(
+            id="claude-sonnet-4-5-20250929",
+            name="Claude Sonnet 4.5",
+            provider="anthropic",
+            available=True,
+        ),
+        ModelInfo(
+            id="claude-opus-4-20250514",
+            name="Claude Opus 4",
+            provider="anthropic",
+            available=True,
+        ),
+        ModelInfo(
+            id="claude-haiku-4-5-20250925",
+            name="Claude Haiku 4.5",
+            provider="anthropic",
+            available=True,
+        ),
+    ]
+
+
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket) -> None:
     """
@@ -105,6 +151,8 @@ async def websocket_chat(websocket: WebSocket) -> None:
 
     Protocol:
         Client sends: {"message": "user message text"}
+        Client sends: {"type": "reset"} to reset conversation
+        Client sends: {"type": "model_change", "model": "claude-sonnet-4-5-20250929"} to switch models
         Server sends: StreamChunk JSON objects with type, content, completed fields
 
     Args:
@@ -114,19 +162,22 @@ async def websocket_chat(websocket: WebSocket) -> None:
     await websocket.accept()
     logger.info(f"WebSocket connection accepted from {websocket.client}")
 
-    # Create and start agent session for this WebSocket
-    agent = ChatAgent(config)
+    # Create agent with automatic model selection initially
+    current_model = None  # None = automatic selection
+    agent = ChatAgent(config, model=current_model)
 
     try:
         # CRITICAL: Start session before processing queries
         await agent.start_session()
-        logger.info("Agent session started for WebSocket")
+        logger.info(f"Agent session started for WebSocket (model: {current_model or 'auto'})")
 
-        # Send connection success message
+        # Send connection success message with model info
+        model_info = agent.get_model_info()
         connection_chunk = StreamChunk(
             type="connected",
-            content="Connected to Netbox chatbox. Ask me about your Netbox infrastructure!",
+            content=f"Connected to Netbox chatbox. Ask me about your Netbox infrastructure!",
             completed=False,
+            metadata={"model": model_info}
         )
         await websocket.send_json(connection_chunk.model_dump())
 
@@ -143,13 +194,52 @@ async def websocket_chat(websocket: WebSocket) -> None:
             try:
                 message_data = json.loads(data)
 
+                # PATTERN: Handle model change request
+                if message_data.get("type") == "model_change":
+                    new_model_id = message_data.get("model")
+                    logger.info(f"Switching model from {current_model or 'auto'} to {new_model_id}")
+
+                    # Map "auto" to None for SDK
+                    model_param = None if new_model_id == "auto" else new_model_id
+
+                    try:
+                        # Close current session
+                        await agent.close_session()
+
+                        # Create new agent with new model
+                        current_model = model_param
+                        agent = ChatAgent(config, model=current_model)
+                        await agent.start_session()
+
+                        logger.info(f"Model switched successfully")
+
+                        # Send confirmation to client
+                        model_info = agent.get_model_info()
+                        model_chunk = StreamChunk(
+                            type="model_changed",
+                            content=f"Switched to {model_info['model_display']}. Context has been reset.",
+                            completed=False,
+                            metadata={"model": model_info}
+                        )
+                        await websocket.send_json(model_chunk.model_dump())
+                        continue
+                    except Exception as model_error:
+                        logger.error(f"Error during model switch: {model_error}", exc_info=True)
+                        error_chunk = StreamChunk(
+                            type="error",
+                            content=f"Failed to switch model: {str(model_error)}",
+                            completed=True,
+                        )
+                        await websocket.send_json(error_chunk.model_dump())
+                        continue
+
                 # PATTERN: Handle session reset request
                 if message_data.get("type") == "reset":
                     logger.info("Received reset request - clearing conversation context")
                     try:
                         # Close current session (clears Claude's conversation memory)
                         await agent.close_session()
-                        # Start fresh session (new context)
+                        # Start fresh session (new context, same model)
                         await agent.start_session()
                         logger.info("Session reset complete - new conversation context")
 
