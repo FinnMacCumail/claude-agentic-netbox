@@ -124,3 +124,7 @@ site/
 
 # Claude configuration
 .claude/
+
+# LangSmith traces
+langsmith-traces/
+trace_analysis_report.md

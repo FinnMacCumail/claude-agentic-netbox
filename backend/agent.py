@@ -5,6 +5,7 @@ Manages Claude SDK sessions and message processing for continuous conversations.
 """
 
 import logging
+import os
 from collections.abc import AsyncIterator
 
 from claude_agent_sdk import (
@@ -23,6 +24,10 @@ from backend.mcp_config import get_allowed_netbox_tools, get_netbox_mcp_config
 from backend.models import StreamChunk
 
 logger = logging.getLogger(__name__)
+
+# Configure LangSmith tracing if enabled
+# Reason: LangSmith integration must be configured before creating Claude SDK client
+_langsmith_configured = False
 
 
 class ChatAgent:
@@ -59,6 +64,33 @@ class ChatAgent:
         """
         self.model = model
         self.config = config
+
+        # Configure LangSmith tracing if enabled
+        # Reason: One-time configuration per process, must happen before creating SDK client
+        global _langsmith_configured
+        if config.langchain_tracing_v2 and not _langsmith_configured:
+            try:
+                from langsmith.integrations.claude_agent_sdk import configure_claude_agent_sdk
+
+                # Set environment variables for LangSmith
+                if config.langchain_api_key:
+                    os.environ["LANGCHAIN_API_KEY"] = config.langchain_api_key
+                os.environ["LANGCHAIN_PROJECT"] = config.langchain_project
+
+                configure_claude_agent_sdk()
+                _langsmith_configured = True
+                logger.info(
+                    f"LangSmith tracing enabled for project '{config.langchain_project}'"
+                )
+            except ImportError:
+                logger.warning(
+                    "LangSmith tracing requested but langsmith package not installed. "
+                    "Install with: pip install 'langsmith[claude-agent-sdk]'"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to configure LangSmith tracing: {e}")
+        elif config.langchain_tracing_v2 and _langsmith_configured:
+            logger.debug("LangSmith tracing already configured")
 
         # PATTERN: Configure ClaudeAgentOptions with MCP servers and model
         self.options = ClaudeAgentOptions(

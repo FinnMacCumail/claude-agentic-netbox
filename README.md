@@ -258,6 +258,71 @@ uv run pytest --cov=backend --cov-report=term-missing
 
 Current coverage: 83 tests (59 backend + 24 CLI), all passing ✅
 
+## LangSmith Tracing (Optional)
+
+LangSmith provides observability and debugging for Claude Agent interactions. When enabled, all agent queries, tool invocations, and model interactions are automatically traced.
+
+### Setup
+
+1. **Get a LangSmith API key** from [https://smith.langchain.com/settings](https://smith.langchain.com/settings)
+
+2. **Update your `.env` file**:
+   ```bash
+   # Enable LangSmith tracing
+   LANGCHAIN_TRACING_V2=true
+   LANGCHAIN_API_KEY=your-langsmith-api-key-here
+   LANGCHAIN_PROJECT=netbox-chatbox
+   ```
+
+3. **Restart the backend server**:
+   ```bash
+   ./start_server.sh
+   ```
+
+### What Gets Traced
+
+- ✅ Agent queries and responses
+- ✅ Tool invocations (netbox_get_objects, netbox_search_objects, etc.)
+- ✅ Claude model interactions
+- ✅ MCP server operations
+- ✅ Multi-turn conversation context
+- ✅ Performance metrics (duration, token usage)
+
+### Viewing Traces
+
+Visit [https://smith.langchain.com](https://smith.langchain.com) and navigate to your project to view detailed traces of all agent interactions.
+
+### Disabling Tracing
+
+Set `LANGCHAIN_TRACING_V2=false` in `.env` or remove the variable entirely. Tracing is **disabled by default**.
+
+### Analyzing Traces
+
+Fetch and analyze your LangSmith traces locally using `langsmith-fetch`:
+
+```bash
+# Fetch traces (default: 20 traces from last hour)
+./fetch_traces.sh
+
+# Fetch specific number of traces from custom time range
+./fetch_traces.sh 50 1440  # 50 traces from last 24 hours
+
+# Analyze fetched traces
+uv run python analyze_traces.py
+
+# View the generated report
+cat trace_analysis_report.md
+```
+
+**What the Analysis Provides:**
+- Completion rates and conversation metrics
+- Tool usage patterns and frequency
+- Sample user queries
+- Performance insights and recommendations
+- Detailed per-trace breakdown
+
+Traces are saved to `./langsmith-traces/` and analyzed locally without needing to open the LangSmith web interface.
+
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and solutions.

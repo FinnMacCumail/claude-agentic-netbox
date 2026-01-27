@@ -34,6 +34,11 @@ class Config:
             os.getenv("CORS_ORIGINS", "http://localhost:3000")
         )
 
+        # LangSmith Tracing Configuration (Optional)
+        self.langchain_tracing_v2: bool = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+        self.langchain_api_key: str = os.getenv("LANGCHAIN_API_KEY", "")
+        self.langchain_project: str = os.getenv("LANGCHAIN_PROJECT", "netbox-chatbox")
+
         # Validate required configuration
         self.validate()
 
@@ -100,6 +105,7 @@ class Config:
             f"netbox_url={self.netbox_url}, "
             f"netbox_token={'***' if self.netbox_token else 'NOT SET'}, "
             f"log_level={self.log_level}, "
-            f"cors_origins={self.cors_origins}"
+            f"cors_origins={self.cors_origins}, "
+            f"langchain_tracing_v2={self.langchain_tracing_v2}"
             f")"
         )
