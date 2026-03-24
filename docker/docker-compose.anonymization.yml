@@ -1,0 +1,194 @@
+version: '3.8'
+
+services:
+  # Production Netbox Database
+  netbox-prod-db:
+    image: postgres:15-alpine
+    container_name: netbox-prod-db
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox
+    volumes:
+      - netbox-prod-db-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Production Redis
+  netbox-prod-redis:
+    image: redis:7-alpine
+    container_name: netbox-prod-redis
+    networks:
+      - prod-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Production Netbox
+  netbox-prod:
+    image: netboxcommunity/netbox:latest
+    container_name: netbox-prod
+    depends_on:
+      netbox-prod-db:
+        condition: service_healthy
+      netbox-prod-redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: netbox-prod-db
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      REDIS_HOST: netbox-prod-redis
+      SECRET_KEY: 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-='
+      ALLOWED_HOSTS: '*'
+      SUPERUSER_NAME: admin
+      SUPERUSER_EMAIL: admin@example.com
+      SUPERUSER_PASSWORD: admin
+    volumes:
+      - netbox-prod-media:/opt/netbox/netbox/media
+      - netbox-prod-reports:/opt/netbox/netbox/reports
+      - netbox-prod-scripts:/opt/netbox/netbox/scripts
+    networks:
+      - prod-network
+    ports:
+      - "8000:8080"  # External 8000 -> Internal 8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Anonymized Netbox Database
+  netbox-anon-db:
+    image: postgres:15-alpine
+    container_name: netbox-anon-db
+    environment:
+      POSTGRES_DB: netbox_anonymized
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox
+    volumes:
+      - netbox-anon-db-data:/var/lib/postgresql/data
+    networks:
+      - anon-network
+    ports:
+      - "5433:5432"  # Different port to avoid conflict
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox -d netbox_anonymized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Anonymized Redis
+  netbox-anon-redis:
+    image: redis:7-alpine
+    container_name: netbox-anon-redis
+    networks:
+      - anon-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Anonymized Netbox
+  netbox-anon:
+    image: netboxcommunity/netbox:latest
+    container_name: netbox-anon
+    depends_on:
+      netbox-anon-db:
+        condition: service_healthy
+      netbox-anon-redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: netbox-anon-db
+      DB_NAME: netbox_anonymized
+      DB_USER: netbox
+      DB_PASSWORD: netbox
+      REDIS_HOST: netbox-anon-redis
+      SECRET_KEY: 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-='
+      ALLOWED_HOSTS: '*'
+      SUPERUSER_NAME: admin
+      SUPERUSER_EMAIL: admin@example.com
+      SUPERUSER_PASSWORD: admin
+    volumes:
+      - netbox-anon-media:/opt/netbox/netbox/media
+      - netbox-anon-reports:/opt/netbox/netbox/reports
+      - netbox-anon-scripts:/opt/netbox/netbox/scripts
+    networks:
+      - anon-network
+    ports:
+      - "8001:8080"  # External 8001 -> Internal 8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Greenmask - Database Anonymization Tool
+  greenmask:
+    build: ./greenmask
+    container_name: greenmask
+    depends_on:
+      netbox-prod-db:
+        condition: service_healthy
+      netbox-anon-db:
+        condition: service_healthy
+    environment:
+      # Source database (production)
+      SOURCE_DB_HOST: netbox-prod-db
+      SOURCE_DB_PORT: 5432
+      SOURCE_DB_NAME: netbox
+      SOURCE_DB_USER: netbox
+      SOURCE_DB_PASSWORD: netbox
+      # Target database (anonymized)
+      TARGET_DB_HOST: netbox-anon-db
+      TARGET_DB_PORT: 5432
+      TARGET_DB_NAME: netbox_anonymized
+      TARGET_DB_USER: netbox
+      TARGET_DB_PASSWORD: netbox
+      # Anonymization settings
+      ANONYMIZATION_SEED: ${ANONYMIZATION_SEED:-default-seed-change-me}
+    volumes:
+      - ./greenmask/greenmask-config-complete.yml:/config/greenmask-config.yml
+      - greenmask-mappings:/mappings
+      - ../../docs/development/anonymization:/config
+    networks:
+      - greenmask-network
+    # Greenmask runs on-demand, not continuously
+    profiles:
+      - tools
+
+networks:
+  prod-network:
+    driver: bridge
+    name: netbox-prod-network
+
+  anon-network:
+    driver: bridge
+    name: netbox-anon-network
+
+  greenmask-network:
+    driver: bridge
+    name: netbox-greenmask-network
+    # This network connects to both prod and anon for copying
+    external: false
+
+volumes:
+  netbox-prod-db-data:
+  netbox-prod-media:
+  netbox-prod-reports:
+  netbox-prod-scripts:
+  netbox-anon-db-data:
+  netbox-anon-media:
+  netbox-anon-reports:
+  netbox-anon-scripts:
+  greenmask-mappings:

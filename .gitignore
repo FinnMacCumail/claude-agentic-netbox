@@ -36,6 +36,7 @@ env/
 .env
 .env.production
 .env.development
+.env.anonymization
 
 # IDE
 .vscode/
@@ -128,3 +129,7 @@ site/
 # LangSmith traces
 langsmith-traces/
 trace_analysis_report.md
+
+# Anonymization mappings (contain real-to-fake mappings)
+backend/anonymization/mappings/
+docker/greenmask/mappings/

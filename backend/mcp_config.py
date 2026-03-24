@@ -17,6 +17,9 @@ def get_netbox_mcp_config(config: Config) -> dict[str, Any]:
     .mcp.json file, using absolute path to the server and passing required
     environment variables.
 
+    When anonymization is enabled, the MCP server will connect to the anonymized
+    Netbox instance instead of production, ensuring Claude never sees real data.
+
     Args:
         config: Application configuration object containing Netbox credentials.
 
@@ -32,11 +35,24 @@ def get_netbox_mcp_config(config: Config) -> dict[str, Any]:
         >>> mcp_config = get_netbox_mcp_config(config)
         >>> options = ClaudeAgentOptions(mcp_servers=mcp_config, ...)
     """
-    # Validate config has required values
-    if not config.netbox_url or not config.netbox_token:
-        raise ValueError(
-            "Netbox configuration incomplete. NETBOX_URL and NETBOX_TOKEN are required."
-        )
+    # Determine which Netbox instance to use based on anonymization setting
+    if config.anonymization_enabled:
+        # CRITICAL: Use anonymized Netbox when anonymization is enabled
+        # This ensures Claude NEVER sees real production data
+        if not config.netbox_anon_url or not config.netbox_anon_token:
+            raise ValueError(
+                "Anonymization is enabled but NETBOX_ANON_URL and NETBOX_ANON_TOKEN are not set."
+            )
+        netbox_url = config.netbox_anon_url
+        netbox_token = config.netbox_anon_token
+    else:
+        # Use production Netbox when anonymization is disabled (development/testing)
+        if not config.netbox_url or not config.netbox_token:
+            raise ValueError(
+                "Netbox configuration incomplete. NETBOX_URL and NETBOX_TOKEN are required."
+            )
+        netbox_url = config.netbox_url
+        netbox_token = config.netbox_token
 
     # CRITICAL: Use absolute path to Netbox MCP server directory
     # CRITICAL: Pass environment variables through env dict
@@ -51,8 +67,8 @@ def get_netbox_mcp_config(config: Config) -> dict[str, Any]:
                 "netbox-mcp-server",
             ],
             "env": {
-                "NETBOX_URL": config.netbox_url,
-                "NETBOX_TOKEN": config.netbox_token,
+                "NETBOX_URL": netbox_url,
+                "NETBOX_TOKEN": netbox_token,
                 "LOG_LEVEL": config.log_level,
             },
         }

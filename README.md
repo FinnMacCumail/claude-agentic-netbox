@@ -244,6 +244,99 @@ docs/               # Documentation and screenshots
 4. **Type Safety**: Pydantic models throughout
 5. **Async/Await**: Full async support for performance
 
+## Data Anonymization (Enterprise Security)
+
+The application includes a complete anonymization solution that allows you to query Netbox data through Claude without exposing sensitive infrastructure information. This feature creates an anonymized copy of your production database that Claude queries instead of real data.
+
+### Why Use Anonymization?
+
+- **Security**: Real production data (IPs, device names, locations) never reaches Claude API
+- **Compliance**: Meet GDPR, HIPAA, and SOC2 requirements for data protection
+- **Business Value**: Enable AI insights without security risks
+- **Transparency**: Users see real values while Claude only sees anonymized data
+
+### How It Works
+
+1. **Greenmask** creates an anonymized copy of your Netbox database
+2. **MCP Server** queries the anonymized database instead of production
+3. **Query Anonymizer** translates user queries to use anonymized values
+4. **Response Restorer** converts anonymized responses back to real values
+5. **Users** never see anonymized data - everything appears normal
+
+### Quick Setup
+
+#### 1. Configure Anonymization
+
+```bash
+# Copy anonymization environment template
+cp .env.anonymization .env
+
+# Edit .env to set:
+# - ANONYMIZATION_ENABLED=true
+# - ANONYMIZATION_SEED=<secure-random-seed>
+# - NETBOX_ANON_URL=http://localhost:8001/api/
+```
+
+#### 2. Start Both Netbox Instances
+
+```bash
+# Start production (port 8000) and anonymized (port 8001) instances
+docker-compose -f docker/docker-compose.anonymization.yml up -d
+```
+
+#### 3. Create Anonymized Database
+
+```bash
+# Run Greenmask to copy and anonymize production data
+docker-compose -f docker/docker-compose.anonymization.yml run --rm greenmask
+
+# This creates an anonymized copy with:
+# - Device names: "core-switch-nyc-01" → "device-7a3f2b"
+# - IP addresses: "192.168.1.10" → "10.234.56.78"
+# - Sites: "NYC-DC1" → "site-9x4k1"
+```
+
+#### 4. Import Mappings
+
+```bash
+# Import Greenmask mappings for query/response translation
+python scripts/import_mappings.py docker/greenmask/mappings/mappings_latest.json
+```
+
+#### 5. Validate Anonymization
+
+```bash
+# Check that no PII exists in anonymized database
+python scripts/validate_anonymization.py \
+  --database postgresql://netbox:netbox@localhost:5433/netbox_anonymized
+```
+
+#### 6. Start Application
+
+```bash
+# Backend uses anonymized database when ANONYMIZATION_ENABLED=true
+./start_server.sh
+
+# Frontend (in another terminal)
+cd frontend && npm run dev
+```
+
+### Example Query Flow
+
+1. **User asks**: "What's the status of core-switch-nyc-01?"
+2. **Query anonymized**: "core-switch-nyc-01" → "device-7a3f2b"
+3. **Claude queries**: Anonymized database for "device-7a3f2b"
+4. **Claude responds**: "device-7a3f2b is active"
+5. **Response restored**: "device-7a3f2b" → "core-switch-nyc-01"
+6. **User sees**: "core-switch-nyc-01 is active"
+
+### Anonymization Details
+
+For complete documentation on the anonymization architecture, see:
+- [Anonymization Solution Report](docs/development/anonymization/ANONYMIZATION_SOLUTION_REPORT.md)
+- [Greenmask Configuration](docs/development/anonymization/greenmask-config-complete.yml)
+- [Development Strategy](docs/development/anonymization/DEVELOPMENT_STRATEGY.md)
+
 ## Testing
 
 Run all unit tests:
