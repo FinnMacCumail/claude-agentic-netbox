@@ -1,71 +1,8 @@
 version: '3.8'
 
 services:
-  # Production Netbox Database
-  netbox-prod-db:
-    image: postgres:15-alpine
-    container_name: netbox-prod-db
-    environment:
-      POSTGRES_DB: netbox
-      POSTGRES_USER: netbox
-      POSTGRES_PASSWORD: netbox
-    volumes:
-      - netbox-prod-db-data:/var/lib/postgresql/data
-    networks:
-      - prod-network
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U netbox"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Production Redis
-  netbox-prod-redis:
-    image: redis:7-alpine
-    container_name: netbox-prod-redis
-    networks:
-      - prod-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Production Netbox
-  netbox-prod:
-    image: netboxcommunity/netbox:latest
-    container_name: netbox-prod
-    depends_on:
-      netbox-prod-db:
-        condition: service_healthy
-      netbox-prod-redis:
-        condition: service_healthy
-    environment:
-      DB_HOST: netbox-prod-db
-      DB_NAME: netbox
-      DB_USER: netbox
-      DB_PASSWORD: netbox
-      REDIS_HOST: netbox-prod-redis
-      SECRET_KEY: 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-='
-      ALLOWED_HOSTS: '*'
-      SUPERUSER_NAME: admin
-      SUPERUSER_EMAIL: admin@example.com
-      SUPERUSER_PASSWORD: admin
-    volumes:
-      - netbox-prod-media:/opt/netbox/netbox/media
-      - netbox-prod-reports:/opt/netbox/netbox/reports
-      - netbox-prod-scripts:/opt/netbox/netbox/scripts
-    networks:
-      - prod-network
-    ports:
-      - "8000:8080"  # External 8000 -> Internal 8080
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+  # NOTE: This configuration uses your existing Netbox instance at port 8000
+  # as the production source. Only the anonymized instance is created here.
 
   # Anonymized Netbox Database
   netbox-anon-db:
@@ -134,21 +71,20 @@ services:
       retries: 5
 
   # Greenmask - Database Anonymization Tool
+  # Connects to your existing Netbox database and creates anonymized copy
   greenmask:
     build: ./greenmask
     container_name: greenmask
     depends_on:
-      netbox-prod-db:
-        condition: service_healthy
       netbox-anon-db:
         condition: service_healthy
     environment:
-      # Source database (production)
-      SOURCE_DB_HOST: netbox-prod-db
+      # Source database (your existing production Netbox)
+      SOURCE_DB_HOST: netbox-docker-postgres-1
       SOURCE_DB_PORT: 5432
       SOURCE_DB_NAME: netbox
       SOURCE_DB_USER: netbox
-      SOURCE_DB_PASSWORD: netbox
+      SOURCE_DB_PASSWORD: ${SOURCE_DB_PASSWORD:-J5brHrAXFLQSif0K}
       # Target database (anonymized)
       TARGET_DB_HOST: netbox-anon-db
       TARGET_DB_PORT: 5432
@@ -162,33 +98,28 @@ services:
       - greenmask-mappings:/mappings
       - ../../docs/development/anonymization:/config
     networks:
-      - greenmask-network
+      - netbox-docker_default  # Connect to existing Netbox network
+      - anon-network            # Connect to anonymized instance
     # Greenmask runs on-demand, not continuously
     profiles:
       - tools
 
 networks:
-  prod-network:
-    driver: bridge
-    name: netbox-prod-network
+  # Reference to your existing Netbox Docker network
+  netbox-docker_default:
+    external: true
+    name: netbox-docker_default
 
+  # New network for anonymized instance
   anon-network:
     driver: bridge
     name: netbox-anon-network
 
-  greenmask-network:
-    driver: bridge
-    name: netbox-greenmask-network
-    # This network connects to both prod and anon for copying
-    external: false
-
 volumes:
-  netbox-prod-db-data:
-  netbox-prod-media:
-  netbox-prod-reports:
-  netbox-prod-scripts:
+  # Volumes for anonymized Netbox instance
   netbox-anon-db-data:
   netbox-anon-media:
   netbox-anon-reports:
   netbox-anon-scripts:
+  # Greenmask mappings storage
   greenmask-mappings:

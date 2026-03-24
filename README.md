@@ -263,34 +263,47 @@ The application includes a complete anonymization solution that allows you to qu
 4. **Response Restorer** converts anonymized responses back to real values
 5. **Users** never see anonymized data - everything appears normal
 
+### Prerequisites
+
+- **Existing Netbox instance** running at `http://localhost:8000`
+- Docker and Docker Compose installed
+- Access to your Netbox database credentials
+
 ### Quick Setup
 
 #### 1. Configure Anonymization
 
 ```bash
 # Copy anonymization environment template
-cp .env.anonymization .env
+cp .env.anonymization.example .env.anonymization
 
-# Edit .env to set:
+# Edit .env.anonymization to set:
+# - ANTHROPIC_API_KEY=<your-api-key>
 # - ANONYMIZATION_ENABLED=true
 # - ANONYMIZATION_SEED=<secure-random-seed>
-# - NETBOX_ANON_URL=http://localhost:8001/api/
+# - SOURCE_DB_PASSWORD=<your-actual-db-password>
+#
+# Get your database password:
+docker inspect netbox-docker-postgres-1 --format '{{json .Config.Env}}' | grep POSTGRES_PASSWORD
 ```
 
-#### 2. Start Both Netbox Instances
+#### 2. Start Anonymized Netbox Instance
 
 ```bash
-# Start production (port 8000) and anonymized (port 8001) instances
-docker-compose -f docker/docker-compose.anonymization.yml up -d
+# Start only the anonymized instance (uses your existing Netbox at port 8000)
+docker-compose -f docker/docker-compose.anonymization.yml up -d netbox-anon
 ```
 
 #### 3. Create Anonymized Database
 
 ```bash
-# Run Greenmask to copy and anonymize production data
+# IMPORTANT: Ensure your existing Netbox is running first!
+docker ps | grep netbox-docker-netbox-1
+
+# Run Greenmask to copy and anonymize data from your existing database
 docker-compose -f docker/docker-compose.anonymization.yml run --rm greenmask
 
-# This creates an anonymized copy with:
+# This connects to your existing Netbox database and creates an anonymized copy:
 # - Device names: "core-switch-nyc-01" → "device-7a3f2b"
 # - IP addresses: "192.168.1.10" → "10.234.56.78"
 # - Sites: "NYC-DC1" → "site-9x4k1"
@@ -314,7 +327,10 @@ python scripts/validate_anonymization.py \
 #### 6. Start Application
 
 ```bash
-# Backend uses anonymized database when ANONYMIZATION_ENABLED=true
+# Backend uses .env.anonymization configuration (anonymized database)
+# Make sure to copy it to .env or set it as active environment
+cp .env.anonymization .env
+
 ./start_server.sh
 
 # Frontend (in another terminal)

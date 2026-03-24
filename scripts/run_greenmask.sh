@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # Greenmask execution script for Netbox anonymization
-# This script runs Greenmask to create an anonymized copy of the production database
+# This script runs Greenmask to create an anonymized copy of your existing Netbox database
+#
+# IMPORTANT: This script connects to your EXISTING Netbox database via Docker network
+# Ensure your existing Netbox instance is running before executing this script
 
 set -e  # Exit on error
 set -u  # Exit on undefined variable
@@ -45,7 +48,9 @@ greenmask validate \
 echo -e "${YELLOW}Step 2: Testing database connectivity...${NC}"
 
 # Test source database
-echo "Testing source database connection..."
+echo "Testing source database connection (${SOURCE_DB_HOST})..."
+echo "NOTE: Connecting to your existing Netbox database on Docker network"
+
 PGPASSWORD="${SOURCE_DB_PASSWORD}" psql \
     -h "${SOURCE_DB_HOST}" \
     -p "${SOURCE_DB_PORT}" \
@@ -54,9 +59,13 @@ PGPASSWORD="${SOURCE_DB_PASSWORD}" psql \
     -c "SELECT version();" > /dev/null 2>&1 \
     || {
         echo -e "${RED}Cannot connect to source database!${NC}"
+        echo "Verify that:"
+        echo "  1. Your existing Netbox is running: docker ps | grep netbox-docker-netbox-1"
+        echo "  2. Database credentials are correct in .env.anonymization"
+        echo "  3. Greenmask container is on the netbox-docker_default network"
         exit 1
     }
-echo "Source database: OK"
+echo "Source database: OK (connected to existing Netbox database)"
 
 # Test target database
 echo "Testing target database connection..."
