@@ -45,3 +45,12 @@ class QueryAnonymizationResult(BaseModel):
     anonymized_query: str
     mappings_applied: Dict[str, str]
     entities_found: int
+
+
+class ResponseRestorationResult(BaseModel):
+    """Result of response restoration."""
+
+    original_response: str
+    restored_response: str
+    restorations_applied: Dict[str, str]
+    hashes_found: int

@@ -1,0 +1,73 @@
+# MCP Configuration Management
+
+## ⚠️ IMPORTANT: Two Separate MCP Configurations
+
+This project has **TWO MCP configuration files** that serve different purposes:
+
+1. **`.mcp.json`** (root directory)
+   - Used by: Your application code (backend/agent.py)
+   - Controls: Which MCP servers your Netbox chatbot application can use
+
+2. **`.claude/.claude.json`**
+   - Used by: Claude Code CLI (the tool you use to talk to me)
+   - Controls: Which MCP servers I (Claude) have access to when helping you code
+
+**Both have been disabled** to remove Playwright.
+
+---
+
+## Current Status
+
+✅ **Active MCP Servers:**
+- Netbox MCP Server (in `.mcp.json` only - for your app)
+
+❌ **Disabled MCP Servers:**
+- Playwright MCP Server (disabled in BOTH configs)
+
+---
+
+## To Re-Enable Playwright MCP
+
+### You Need to Restore BOTH Files
+
+**1. Restore Application Config (`.mcp.json`)**
+```bash
+cp .mcp.json.backup .mcp.json
+```
+
+**2. Restore CLI Config (`.claude/.claude.json`)**
+```bash
+cp .claude/.claude.json.backup .claude/.claude.json
+```
+
+**3. Restart Claude Code CLI**
+```bash
+# Exit and restart for changes to take effect
+/exit
+# Then start Claude Code again
+```
+
+---
+
+## Files Modified
+
+### Application Config:
+- `.mcp.json` - Active config (Netbox only)
+- `.mcp.json.backup` - Full backup with Playwright
+
+### CLI Config:
+- `.claude/.claude.json` - Active config (empty)
+- `.claude/.claude.json.backup` - Full backup with Playwright
+
+### Documentation:
+- `.mcp.json.README` - This file (instructions)
+
+---
+
+## Notes
+
+- Backups created on: 2026-03-24
+- Playwright MCP was disabled to focus on Netbox functionality
+- All Playwright browser data still available in `playwright-browsers/`
+- Playwright config still available in `.claude/playwright-config.json`
+- To permanently remove Playwright, delete these additional files/directories

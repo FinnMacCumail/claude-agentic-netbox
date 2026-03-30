@@ -31,18 +31,33 @@ class QueryAnonymizer:
         self.mapping_service = mapping_service
 
         # PATTERN: Compile regex patterns for different entity types
+        # Based on actual device naming in the database
         self.patterns = {
             "device": re.compile(
-                r"\b([\w]+-switch-[\w]+|[\w]+-router-[\w]+|"
+                # Match patterns like: dmi01-albany-rtr01, dmi01-akron-sw01, dmi01-albany-pdu01
+                r"\b(dmi\d+-[\w]+-(?:rtr|sw|pdu|fw|lb|ap)\d+|"
+                # Also match generic patterns
+                r"[\w]+-switch-[\w]+|[\w]+-router-[\w]+|"
                 r"[\w]+-firewall-[\w]+|[\w]+-server-[\w]+|"
                 r"[\w]+-lb-[\w]+|[\w]+-ap-[\w]+|[\w]+-core-[\w]+|"
                 r"core-[\w]+-[\w]+|edge-[\w]+-[\w]+|dist-[\w]+-[\w]+)\b",
                 re.IGNORECASE,
             ),
             "site": re.compile(
-                r"\b([A-Z]{2,4}-DC\d+|[\w]+-Office|[\w]+-DataCenter|"
+                # Match patterns like: DM-Albany, DM-Akron, etc.
+                r"\b(DM-[\w]+|"
+                # Also match other patterns
+                r"[A-Z]{2,4}-DC\d+|[\w]+-Office|[\w]+-DataCenter|"
                 r"[A-Z]{2,4}-HQ|[A-Z]{2,4}-BR\d+|[\w]+-Campus|"
                 r"[\w]+-Colo|[\w]+-AWS|[\w]+-Azure|[\w]+-GCP)\b",
+                re.IGNORECASE,
+            ),
+            "site_casual": re.compile(
+                # Match casual references to city names that might be sites
+                r"\b(Albany|Akron|Amsterdam|Boston|Buffalo|Charlotte|Columbus|"
+                r"Dallas|Detroit|Greensboro|Hartford|Jersey City|Manchester|"
+                r"Newark|New York|NYC|Philadelphia|Providence|Syracuse|"
+                r"Wilmington|Worcester)\b",
                 re.IGNORECASE,
             ),
             "ip": re.compile(
@@ -94,18 +109,36 @@ class QueryAnonymizer:
                     matched_text, entity_type=table_column
                 )
 
+                # If no exact match and it's a site name, try case-insensitive and partial matching
+                if not anonymized and entity_type in ["site", "site_casual"]:
+                    # For casual references like "Albany", try to find "DM-Albany"
+                    for original_name in self.mapping_service.get_all_original_values("dcim_site.name"):
+                        # Case-insensitive exact match
+                        if original_name.lower() == matched_text.lower():
+                            anonymized = self.mapping_service.get_anonymized(
+                                original_name, entity_type="dcim_site.name"
+                            )
+                            matched_text = original_name  # Use exact casing from DB
+                            break
+                        # Partial match (e.g., "Albany" in "DM-Albany")
+                        elif matched_text.lower() in original_name.lower():
+                            anonymized = self.mapping_service.get_anonymized(
+                                original_name, entity_type="dcim_site.name"
+                            )
+                            matched_text = original_name  # Use full name from DB
+                            break
+
                 if anonymized:
                     # Store replacement info
                     replacements_made.append(
-                        (match.start(), match.end(), matched_text, anonymized)
+                        (match.start(), match.end(), match.group(0), anonymized)
                     )
                     mappings_applied[matched_text] = anonymized
-                    logger.debug(f"Anonymized '{matched_text}' → '{anonymized}'")
+                    logger.info(f"✅ Anonymized '{matched_text}' → '{anonymized[:16]}...'")
                 else:
                     # PATTERN: Handle missing mapping
                     logger.warning(
-                        f"No mapping found for '{matched_text}' (type: {entity_type}). "
-                        f"This entity may not exist in anonymized DB."
+                        f"⚠️ No mapping found for '{matched_text}' (type: {entity_type})"
                     )
                     # Keep original value (will likely not match in anon DB)
 
@@ -140,6 +173,7 @@ class QueryAnonymizer:
         mapping = {
             "device": "dcim_device.name",
             "site": "dcim_site.name",
+            "site_casual": "dcim_site.name",  # Casual site references map to site names
             "ip": "ipam_ipaddress.address",
             "mac": "dcim_interface.mac_address",
             "vlan": "ipam_vlan.name",

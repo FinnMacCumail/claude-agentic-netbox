@@ -1,0 +1,202 @@
+common:
+  pg_bin_path: "/usr/bin/"
+  tmp_dir: "/tmp"
+
+log:
+  level: "info"
+  format: "text"
+
+storage:
+  directory:
+    path: "/mappings"
+
+dump:
+  pg_dump_options:
+    dbname: "postgresql://${SOURCE_DB_USER}:${SOURCE_DB_PASSWORD}@${SOURCE_DB_HOST}:${SOURCE_DB_PORT}/${SOURCE_DB_NAME}"
+    jobs: 1
+    load-via-partition-root: true
+
+  transformation:
+    - schema: "public"
+      name: "dcim_site"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "Hash"
+          params:
+            column: "slug"
+            function: "sha256"
+        - name: "Masking"
+          params:
+            column: "physical_address"
+            type: "addr"
+        - name: "Masking"
+          params:
+            column: "shipping_address"
+            type: "addr"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+        - name: "NoiseNumeric"
+          params:
+            column: "latitude"
+            decimal: 6
+            min_ratio: -10.0
+            max_ratio: 10.0
+        - name: "NoiseNumeric"
+          params:
+            column: "longitude"
+            decimal: 6
+            min_ratio: -10.0
+            max_ratio: 10.0
+
+    - schema: "public"
+      name: "dcim_device"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "Hash"
+          params:
+            column: "serial"
+            function: "md5"
+        - name: "Hash"
+          params:
+            column: "asset_tag"
+            function: "md5"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+
+    - schema: "public"
+      name: "dcim_interface"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "Masking"
+          params:
+            column: "description"
+            type: "default"
+
+    - schema: "public"
+      name: "ipam_ipaddress"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "dns_name"
+            function: "sha256"
+        - name: "Masking"
+          params:
+            column: "description"
+            type: "default"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+
+    - schema: "public"
+      name: "ipam_prefix"
+      transformers:
+        - name: "Masking"
+          params:
+            column: "description"
+            type: "default"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+
+    - schema: "public"
+      name: "ipam_vlan"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "Masking"
+          params:
+            column: "description"
+            type: "default"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+
+    - schema: "public"
+      name: "tenancy_tenant"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "Hash"
+          params:
+            column: "slug"
+            function: "sha256"
+        - name: "Masking"
+          params:
+            column: "description"
+            type: "default"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+
+    - schema: "public"
+      name: "tenancy_contact"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "RandomEmail"
+          params:
+            column: "email"
+        - name: "RandomE164"
+          params:
+            column: "phone"
+        - name: "Masking"
+          params:
+            column: "address"
+            type: "addr"
+
+    - schema: "public"
+      name: "circuits_provider"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "name"
+            function: "sha256"
+        - name: "Hash"
+          params:
+            column: "slug"
+            function: "sha256"
+
+    - schema: "public"
+      name: "circuits_circuit"
+      transformers:
+        - name: "Hash"
+          params:
+            column: "cid"
+            function: "sha256"
+        - name: "Masking"
+          params:
+            column: "description"
+            type: "default"
+        - name: "Masking"
+          params:
+            column: "comments"
+            type: "default"
+
+restore:
+  pg_restore_options:
+    dbname: "postgresql://${TARGET_DB_USER}:${TARGET_DB_PASSWORD}@${TARGET_DB_HOST}:${TARGET_DB_PORT}/${TARGET_DB_NAME}"
+    jobs: 1
+    exit-on-error: false

@@ -31,7 +31,8 @@ class MappingService:
         """
         self.mappings_file = Path(mappings_file)
         self.forward_mappings: Dict[str, Dict[str, str]] = {}  # original → anon
-        self.reverse_mappings: Dict[str, str] = {}  # anon → original
+        self.reverse_mappings: Dict[str, Dict[str, str]] = {}  # anon → original
+        self.metadata: Dict = {}
         self.loaded_at: Optional[datetime] = None
         self.tables_count = 0
         self.mappings_count = 0
@@ -42,12 +43,27 @@ class MappingService:
 
         Expected format:
         {
-          "dcim_device.name": {
-            "core-switch-nyc-01": "device-7a3f2b",
-            "access-sw-lon-01": "device-x2p9q7"
+          "forward": {
+            "dcim_device.name": {
+              "core-switch-nyc-01": "device-7a3f2b",
+              "access-sw-lon-01": "device-x2p9q7"
+            },
+            "dcim_site.name": {
+              "NYC-DC1": "site-9x4k1"
+            }
           },
-          "dcim_site.name": {
-            "NYC-DC1": "site-9x4k1"
+          "reverse": {
+            "dcim_device.name": {
+              "device-7a3f2b": "core-switch-nyc-01",
+              "device-x2p9q7": "access-sw-lon-01"
+            },
+            "dcim_site.name": {
+              "site-9x4k1": "NYC-DC1"
+            }
+          },
+          "metadata": {
+            "generated_at": "2026-03-30T16:30:00Z",
+            "total_mappings": 1816
           }
         }
 
@@ -59,40 +75,36 @@ class MappingService:
 
         if not self.mappings_file.exists():
             raise FileNotFoundError(
-                f"Greenmask mappings file not found: {self.mappings_file}"
+                f"Greenmask mappings file not found: {self.mappings_file}\n"
+                f"Run: python scripts/generate_mappings.py"
             )
 
         with open(self.mappings_file, "r") as f:
-            raw_mappings = json.load(f)
+            data = json.load(f)
 
         # Reset mappings before loading new ones
         self.forward_mappings.clear()
         self.reverse_mappings.clear()
         self.mappings_count = 0
 
-        # Build forward and reverse mappings
-        for table_column, mapping_dict in raw_mappings.items():
-            self.forward_mappings[table_column] = mapping_dict
+        # Load forward and reverse mappings
+        if "forward" in data:
+            self.forward_mappings = data["forward"]
+        if "reverse" in data:
+            self.reverse_mappings = data["reverse"]
+        if "metadata" in data:
+            self.metadata = data["metadata"]
 
-            # Build reverse index (anon → original)
-            for original, anonymized in mapping_dict.items():
-                # PATTERN: Include table.column context for disambiguation
-                key = f"{table_column}:{anonymized}"
-                self.reverse_mappings[key] = original
+        # Count total mappings
+        for table_column in self.forward_mappings:
+            self.mappings_count += len(self.forward_mappings[table_column])
 
-                # Also store without prefix for faster generic lookup
-                # RISK: Collisions if same anon value used in multiple tables
-                if anonymized not in self.reverse_mappings:
-                    self.reverse_mappings[anonymized] = original
-
-            self.mappings_count += len(mapping_dict)
-
-        self.tables_count = len(raw_mappings)
+        self.tables_count = len(self.forward_mappings)
         self.loaded_at = datetime.utcnow()
 
         logger.info(
             f"Loaded {self.mappings_count} mappings across {self.tables_count} "
-            f"tables from Greenmask"
+            f"tables from Greenmask (generated: {self.metadata.get('generated_at', 'unknown')})"
         )
 
     def get_anonymized(
@@ -137,14 +149,44 @@ class MappingService:
         Returns:
             Original value if found, None otherwise.
         """
-        # PATTERN: Try with context first
-        if entity_type:
-            key = f"{entity_type}:{anonymized}"
-            if key in self.reverse_mappings:
-                return self.reverse_mappings[key]
+        # Try with entity_type first for accuracy
+        if entity_type and entity_type in self.reverse_mappings:
+            return self.reverse_mappings[entity_type].get(anonymized)
 
-        # PATTERN: Fall back to generic lookup
-        return self.reverse_mappings.get(anonymized)
+        # Fall back to searching all tables
+        for table_column, mappings in self.reverse_mappings.items():
+            if anonymized in mappings:
+                return mappings[anonymized]
+
+        return None
+
+    def get_all_original_values(self, entity_type: str) -> list:
+        """
+        Get all original values for a specific entity type.
+
+        Args:
+            entity_type: Table.column identifier (e.g., "dcim_site.name").
+
+        Returns:
+            List of original values.
+        """
+        if entity_type in self.forward_mappings:
+            return list(self.forward_mappings[entity_type].keys())
+        return []
+
+    def get_all_anonymized_values(self, entity_type: str) -> list:
+        """
+        Get all anonymized values for a specific entity type.
+
+        Args:
+            entity_type: Table.column identifier (e.g., "dcim_site.name").
+
+        Returns:
+            List of anonymized values.
+        """
+        if entity_type in self.forward_mappings:
+            return list(self.forward_mappings[entity_type].values())
+        return []
 
     def get_stats(self) -> Dict:
         """Get mapping statistics."""

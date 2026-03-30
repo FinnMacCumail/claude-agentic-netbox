@@ -7,6 +7,7 @@ Manages Claude SDK sessions and message processing for continuous conversations.
 import logging
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -19,7 +20,9 @@ from claude_agent_sdk import (
 )
 
 from backend.config import Config
-
+from backend.anonymization.mapping_service import MappingService
+from backend.anonymization.query_anonymizer import QueryAnonymizer
+from backend.anonymization.response_restorer import ResponseRestorer
 from backend.mcp_config import get_allowed_netbox_tools, get_netbox_mcp_config
 from backend.models import StreamChunk
 
@@ -64,6 +67,28 @@ class ChatAgent:
         """
         self.model = model
         self.config = config
+
+        # Initialize anonymization services if enabled
+        self.query_anonymizer = None
+        self.response_restorer = None
+
+        if config.anonymization_enabled and config.anonymization_mode == "greenmask":
+            try:
+                mappings_file = Path("backend/anonymization/mappings/mappings_latest.json")
+                if mappings_file.exists():
+                    logger.info(f"Loading anonymization mappings from {mappings_file}")
+                    mapping_service = MappingService(str(mappings_file))
+                    mapping_service.load_mappings()
+
+                    self.query_anonymizer = QueryAnonymizer(mapping_service)
+                    self.response_restorer = ResponseRestorer(mapping_service)
+
+                    stats = mapping_service.get_stats()
+                    logger.info(f"Anonymization enabled: {stats['mappings_count']} mappings loaded")
+                else:
+                    logger.warning(f"Anonymization enabled but mapping file not found: {mappings_file}")
+            except Exception as e:
+                logger.error(f"Failed to initialize anonymization: {e}", exc_info=True)
 
         # Configure LangSmith tracing if enabled
         # Reason: One-time configuration per process, must happen before creating SDK client
@@ -203,9 +228,21 @@ class ChatAgent:
             raise RuntimeError("Session not active. Call start_session() first.")
 
         try:
+            # Anonymize query if enabled
+            query_to_send = message
+            if self.query_anonymizer:
+                anonymization_result = self.query_anonymizer.anonymize(message)
+                if anonymization_result.mappings_applied:
+                    logger.info(f"Anonymized {anonymization_result.entities_found} entities in query")
+                    for orig, anon in anonymization_result.mappings_applied.items():
+                        logger.debug(f"  {orig} -> {anon[:16]}...")
+                    query_to_send = anonymization_result.anonymized_query
+                else:
+                    logger.debug("No entities to anonymize in query")
+
             # Send query to Claude
-            logger.debug(f"Sending query: {message[:100]}...")
-            await self.client.query(message)
+            logger.debug(f"Sending query: {query_to_send[:100]}...")
+            await self.client.query(query_to_send)
 
             # PATTERN: Type-safe message processing
             # CRITICAL: Don't use break, let iteration complete naturally
@@ -218,13 +255,26 @@ class ChatAgent:
                         if isinstance(block, TextBlock):
                             # Stream text content
                             if block.text:  # Only yield non-empty text
-                                yield StreamChunk(type="text", content=block.text, completed=False)
+                                # Restore anonymized values if enabled
+                                text_to_send = block.text
+                                if self.response_restorer:
+                                    restoration_result = self.response_restorer.restore(block.text)
+                                    if restoration_result.restorations_applied:
+                                        logger.debug(f"Restored {len(restoration_result.restorations_applied)} values in response")
+                                        text_to_send = restoration_result.restored_response
+                                yield StreamChunk(type="text", content=text_to_send, completed=False)
                         elif isinstance(block, ToolUseBlock):
                             # Tool being used
                             logger.debug(f"Tool use: {block.name}")
+                            # Restore any anonymized values in tool use display
+                            tool_msg = f"Using tool: {block.name}"
+                            if self.response_restorer:
+                                restoration_result = self.response_restorer.restore(tool_msg)
+                                if restoration_result.restorations_applied:
+                                    tool_msg = restoration_result.restored_response
                             yield StreamChunk(
                                 type="tool_use",
-                                content=f"Using tool: {block.name}",
+                                content=tool_msg,
                                 completed=False,
                             )
                         elif isinstance(block, ToolResultBlock):

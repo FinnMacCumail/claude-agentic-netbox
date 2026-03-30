@@ -38,7 +38,7 @@ services:
 
   # Anonymized Netbox
   netbox-anon:
-    image: netboxcommunity/netbox:latest
+    image: netboxcommunity/netbox:v4.3-3.3.0
     container_name: netbox-anon
     depends_on:
       netbox-anon-db:
@@ -52,6 +52,7 @@ services:
       DB_PASSWORD: netbox
       REDIS_HOST: netbox-anon-redis
       SECRET_KEY: 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-='
+      API_TOKEN_PEPPERS: 'default-pepper-0123456789abcdef'
       ALLOWED_HOSTS: '*'
       SUPERUSER_NAME: admin
       SUPERUSER_EMAIL: admin@example.com
@@ -94,9 +95,7 @@ services:
       # Anonymization settings
       ANONYMIZATION_SEED: ${ANONYMIZATION_SEED:-default-seed-change-me}
     volumes:
-      - ./greenmask/greenmask-config-complete.yml:/config/greenmask-config.yml
       - greenmask-mappings:/mappings
-      - ../../docs/development/anonymization:/config
     networks:
       - netbox-docker_default  # Connect to existing Netbox network
       - anon-network            # Connect to anonymized instance

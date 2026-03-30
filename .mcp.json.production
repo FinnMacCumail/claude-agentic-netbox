@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "netbox": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/home/ola/dev/rnd/mcp/testmcp/netbox-mcp-server",
+        "run",
+        "netbox-mcp-server"
+      ],
+      "env": {
+        "NETBOX_URL": "http://localhost:8000",
+        "NETBOX_TOKEN": "c4af48e5b315a5baf92f7ca449ac5d664239916a",
+        "LOG_LEVEL": "ERROR"
+      }
+    }
+  }
+}

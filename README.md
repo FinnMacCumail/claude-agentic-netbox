@@ -291,7 +291,7 @@ docker inspect netbox-docker-postgres-1 --format '{{json .Config.Env}}' | grep P
 
 ```bash
 # Start only the anonymized instance (uses your existing Netbox at port 8000)
-docker-compose -f docker/docker-compose.anonymization.yml up -d netbox-anon
+docker compose -f docker/docker-compose.anonymization.yml up -d netbox-anon
 ```
 
 #### 3. Create Anonymized Database
@@ -301,7 +301,7 @@ docker-compose -f docker/docker-compose.anonymization.yml up -d netbox-anon
 docker ps | grep netbox-docker-netbox-1
 
 # Run Greenmask to copy and anonymize data from your existing database
-docker-compose -f docker/docker-compose.anonymization.yml run --rm greenmask
+docker compose -f docker/docker-compose.anonymization.yml run --rm greenmask
 
 # This connects to your existing Netbox database and creates an anonymized copy:
 # - Device names: "core-switch-nyc-01" → "device-7a3f2b"
