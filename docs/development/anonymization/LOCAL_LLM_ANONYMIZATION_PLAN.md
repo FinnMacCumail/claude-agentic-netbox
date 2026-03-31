@@ -81,30 +81,75 @@ class LLMAnonymizer:
         return anonymized
 ```
 
-#### 3. Entity Recognition Prompt
+#### 3. Dynamic Entity Recognition Strategy
 
+Instead of hardcoding entity lists (which is unmaintainable), the system uses intelligent dynamic discovery:
+
+```python
+class DynamicLLMAnonymizer:
+    def __init__(self, mapping_service):
+        self.mapping_service = mapping_service
+        # Automatically discover entity types from mappings
+        self.entity_types = self._discover_entity_types()
+        self.entity_index = self._build_entity_index()
+
+    def _discover_entity_types(self):
+        """Extract all table.column patterns from mappings"""
+        types = {}
+        for key in self.mapping_service.forward_mappings.keys():
+            # Parse "dcim_device.name" -> {"dcim_device": ["name"]}
+            table, column = key.split('.')
+            if table not in types:
+                types[table] = []
+            types[table].append(column)
+        return types
+```
+
+**Two-Stage Entity Recognition Process:**
+
+**Stage 1: Entity Type Classification**
 ```markdown
-System: You are an entity recognition system for network infrastructure queries.
-You have access to these mappings:
+System: Identify what types of network infrastructure entities are mentioned.
 
-Sites: ["DM-Albany", "Butler Communications", "DM-Akron", ...]
-Devices: ["dmi01-albany-rtr01", "ncsu128-distswitch1", ...]
-IPs: ["10.1.1.1", "192.168.1.100", ...]
+Available categories:
+- Sites/Locations (data centers, offices, campuses)
+- Devices (routers, switches, servers, PDUs)
+- Network (IPs, VLANs, interfaces, circuits)
+- Physical (racks, cables, power)
 
-Task: Identify entities in the user query that match items in the mappings.
-Use fuzzy matching - "Butler" should match "Butler Communications".
+Query: "list all devices at the Butler site"
+Response: ["sites", "devices"]
+```
 
-User Query: "list all devices at the Butler site"
+**Stage 2: Targeted Entity Extraction**
+```markdown
+System: You are an entity recognition system. Based on discovered patterns:
 
-Response Format (JSON):
+Sites in database follow patterns:
+- "DM-{City}" (e.g., DM-Albany, DM-Akron)
+- "{Name} Communications" (e.g., Butler Communications)
+- Sample: [5-10 actual examples from database]
+- Total available: 24 sites
+
+Devices in database follow patterns:
+- "dmi{##}-{location}-{type}{##}"
+- "{prefix}-{function}-{location}"
+- Sample: [5-10 actual examples]
+- Total available: 72 devices
+
+Query: "list all devices at the Butler site"
+
+Task: Identify entities using fuzzy matching.
+"Butler" should match "Butler Communications" if that exists.
+
+Response:
 {
   "entities": [
     {
-      "text": "Butler",
+      "text_in_query": "Butler",
       "matched_entity": "Butler Communications",
-      "type": "site",
-      "start": 27,
-      "end": 33
+      "entity_type": "dcim_site.name",
+      "confidence": 0.95
     }
   ]
 }
@@ -225,51 +270,185 @@ else:
 
 ## Technical Implementation Details
 
-### Option 1: Ollama Integration (Recommended)
+### Production-Ready Dynamic Implementation
 
 ```python
 # backend/anonymization/llm_anonymizer.py
 import json
-from typing import List, Dict, Any
+import hashlib
+from typing import List, Dict, Any, Optional
+from collections import defaultdict
+from cachetools import TTLCache
 import httpx
 from backend.anonymization.models import QueryAnonymizationResult
 
-class LLMAnonymizer:
+class ProductionLLMAnonymizer:
+    """
+    Production-ready LLM anonymizer with dynamic entity discovery.
+    No hardcoded entity lists - everything discovered from mappings.
+    """
+
     def __init__(self, mapping_service, config: Dict[str, Any]):
         self.mapping_service = mapping_service
         self.base_url = config.get("base_url", "http://localhost:11434")
         self.model = config.get("model", "llama3.2:3b")
         self.client = httpx.AsyncClient(timeout=5.0)
 
-    async def anonymize(self, query: str) -> QueryAnonymizationResult:
-        # Build context from mappings
-        context = {
-            "sites": list(self.mapping_service.get_all_original_values("dcim_site.name")),
-            "devices": list(self.mapping_service.get_all_original_values("dcim_device.name")),
-            "ips": list(self.mapping_service.get_all_original_values("ipam_ipaddress.address"))
+        # Dynamic discovery at initialization
+        self.entity_schema = self._discover_schema()
+        self.entity_index = self._build_entity_index()
+
+        # Performance optimization
+        self.prompt_cache = TTLCache(maxsize=1000, ttl=3600)
+        self.result_cache = TTLCache(maxsize=1000, ttl=300)
+
+    def _discover_schema(self) -> Dict:
+        """Automatically discover Netbox schema from mappings"""
+        schema = {}
+
+        for table_column in self.mapping_service.forward_mappings.keys():
+            table, column = table_column.split('.')
+
+            if table not in schema:
+                schema[table] = {
+                    "columns": [],
+                    "sample_count": 0,
+                    "patterns": set(),
+                    "keywords": set()
+                }
+
+            schema[table]["columns"].append(column)
+
+            # Analyze samples to learn patterns
+            samples = list(self.mapping_service.forward_mappings[table_column].keys())[:100]
+            schema[table]["sample_count"] = len(self.mapping_service.forward_mappings[table_column])
+
+            for sample in samples:
+                # Extract pattern (e.g., "dmi01-albany-rtr01" -> "XXN-XXX-XXXN")
+                pattern = self._extract_pattern(sample)
+                schema[table]["patterns"].add(pattern)
+
+                # Extract keywords
+                parts = re.split(r'[-_\.]', sample.lower())
+                schema[table]["keywords"].update(parts)
+
+        return schema
+
+    def _build_entity_index(self) -> Dict:
+        """Build searchable index for efficient entity lookup"""
+        index = {
+            "by_keyword": defaultdict(list),
+            "by_prefix": defaultdict(list),
+            "by_pattern": defaultdict(list)
         }
 
-        # Prepare prompt
-        prompt = self._build_prompt(query, context)
+        for table_column, mappings in self.mapping_service.forward_mappings.items():
+            for entity_name in mappings.keys():
+                # Index by keywords
+                keywords = re.split(r'[-_\.]', entity_name.lower())
+                for keyword in keywords:
+                    index["by_keyword"][keyword].append((entity_name, table_column))
 
-        # Call Ollama
-        response = await self.client.post(
-            f"{self.base_url}/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "temperature": 0.1,
-                "format": "json"
-            }
-        )
+                # Index by prefix
+                prefix = entity_name.split('-')[0].lower() if '-' in entity_name else entity_name[:3].lower()
+                index["by_prefix"][prefix].append((entity_name, table_column))
 
-        # Parse response
-        result = response.json()
-        entities = json.loads(result["response"])
+                # Index by pattern
+                pattern = self._extract_pattern(entity_name)
+                index["by_pattern"][pattern].append((entity_name, table_column))
 
-        # Apply anonymization
-        return self._apply_anonymization(query, entities)
+        return index
+
+    async def anonymize(self, query: str) -> QueryAnonymizationResult:
+        """Main anonymization with intelligent context building"""
+
+        # Check cache
+        cache_key = hashlib.md5(query.encode()).hexdigest()
+        if cache_key in self.result_cache:
+            return self.result_cache[cache_key]
+
+        # Stage 1: Identify entity types in query
+        entity_types = await self._identify_entity_types(query)
+
+        # Stage 2: Build targeted context (not all 1816 mappings!)
+        context = self._build_targeted_context(query, entity_types)
+
+        # Stage 3: Extract specific entities
+        entities = await self._extract_entities(query, context)
+
+        # Stage 4: Apply anonymization
+        result = self._apply_anonymization(query, entities)
+
+        # Cache result
+        self.result_cache[cache_key] = result
+
+        return result
+
+    async def _identify_entity_types(self, query: str) -> List[str]:
+        """First stage: Identify what types of entities to look for"""
+
+        prompt = f"""Identify infrastructure entity types in this query.
+
+Categories:
+- sites: data centers, offices, locations
+- devices: routers, switches, servers, PDUs
+- network: IPs, VLANs, interfaces
+- physical: racks, cables, power
+
+Query: "{query}"
+
+Return JSON list of relevant categories only.
+Example: ["sites", "devices"]"""
+
+        response = await self._llm_call(prompt)
+        return json.loads(response)
+
+    def _build_targeted_context(self, query: str, entity_types: List[str]) -> Dict:
+        """Build minimal context with only relevant entities"""
+
+        context = {"patterns": {}, "samples": {}, "stats": {}}
+        query_lower = query.lower()
+        query_words = set(query_lower.split())
+
+        # Find potentially relevant entities
+        relevant_entities = set()
+
+        # Search by keywords in query
+        for word in query_words:
+            if word in self.entity_index["by_keyword"]:
+                for entity, type_ in self.entity_index["by_keyword"][word][:10]:
+                    relevant_entities.add((entity, type_))
+
+        # Group by type and build context
+        for entity_type in entity_types:
+            table_names = self._get_tables_for_type(entity_type)
+
+            for table in table_names:
+                if table in self.entity_schema:
+                    # Add patterns
+                    context["patterns"][table] = list(self.entity_schema[table]["patterns"])[:5]
+
+                    # Add relevant samples
+                    table_entities = [e for e, t in relevant_entities if t.startswith(table)]
+                    if not table_entities and f"{table}.name" in self.mapping_service.forward_mappings:
+                        # Get a few samples if no keyword matches
+                        all_entities = list(self.mapping_service.forward_mappings[f"{table}.name"].keys())
+                        table_entities = all_entities[:10]
+
+                    context["samples"][table] = table_entities[:10]
+                    context["stats"][table] = self.entity_schema[table]["sample_count"]
+
+        return context
+
+    def _get_tables_for_type(self, entity_type: str) -> List[str]:
+        """Map entity type to Netbox tables"""
+        mapping = {
+            "sites": ["dcim_site", "dcim_location"],
+            "devices": ["dcim_device", "dcim_devicetype"],
+            "network": ["ipam_ipaddress", "ipam_vlan", "dcim_interface"],
+            "physical": ["dcim_rack", "dcim_cable", "dcim_powerfeed"]
+        }
+        return mapping.get(entity_type, [])
 ```
 
 ### Option 2: LangChain with Local Model
@@ -306,24 +485,185 @@ Query: {query}
         )
 ```
 
-### Option 3: Direct API Integration
+### Option 3: Configuration-Driven Approach
+
+Make the entire system configurable without code changes:
+
+```yaml
+# config/anonymization_config.yaml
+anonymization:
+  strategy: "dynamic_llm"  # Options: "regex", "llm", "hybrid"
+
+  llm:
+    provider: "ollama"
+    base_url: "http://localhost:11434"
+    model: "llama3.2:3b"
+    temperature: 0.1
+    timeout_ms: 500
+    max_context_tokens: 1000
+
+  entity_recognition:
+    # Automatically discover from database
+    auto_discover: true
+
+    # Two-stage recognition
+    stages:
+      - type: "classification"
+        enabled: true
+        cache_ttl: 3600
+      - type: "extraction"
+        enabled: true
+        max_samples_per_type: 10
+
+    # Performance tuning
+    optimization:
+      use_cache: true
+      cache_size: 1000
+      cache_ttl: 300
+      batch_size: 10
+      parallel_requests: false
+
+    # Context building
+    context:
+      max_entities_per_type: 20
+      include_patterns: true
+      include_statistics: true
+      keyword_search_depth: 10
+
+    # Fallback strategies
+    fallback:
+      - strategy: "fuzzy_match"
+        threshold: 0.7
+      - strategy: "pattern_match"
+        enabled: true
+      - strategy: "regex"  # Final fallback
+        enabled: true
+
+  # Semantic search (optional)
+  embeddings:
+    enabled: false
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+    index_type: "faiss"  # or "annoy", "hnswlib"
+    dimension: 384
+
+  # Entity type mappings
+  entity_types:
+    # Map high-level types to Netbox tables
+    sites:
+      tables: ["dcim_site", "dcim_location"]
+      keywords: ["site", "location", "datacenter", "office"]
+    devices:
+      tables: ["dcim_device", "dcim_devicetype"]
+      keywords: ["device", "router", "switch", "server", "pdu"]
+    network:
+      tables: ["ipam_ipaddress", "ipam_vlan", "dcim_interface"]
+      keywords: ["ip", "vlan", "interface", "network", "subnet"]
+    physical:
+      tables: ["dcim_rack", "dcim_cable", "dcim_powerfeed"]
+      keywords: ["rack", "cable", "power", "port"]
+
+  # Monitoring and metrics
+  monitoring:
+    log_level: "info"
+    metrics_enabled: true
+    track_performance: true
+    alert_on_fallback: false
+```
 
 ```python
-class DirectLLMAnonymizer:
-    """Minimal implementation without additional dependencies"""
+# backend/anonymization/llm_config.py
+import yaml
+from pathlib import Path
+from typing import Dict, Any
 
-    async def call_llm(self, prompt: str) -> Dict:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:11434/api/generate",
-                json={
+class AnonymizationConfig:
+    """Load and manage anonymization configuration"""
+
+    def __init__(self, config_path: str = "config/anonymization_config.yaml"):
+        self.config_path = Path(config_path)
+        self.config = self._load_config()
+
+    def _load_config(self) -> Dict[str, Any]:
+        """Load configuration from YAML file"""
+        if not self.config_path.exists():
+            # Return sensible defaults
+            return self._get_defaults()
+
+        with open(self.config_path, 'r') as f:
+            return yaml.safe_load(f)
+
+    def _get_defaults(self) -> Dict[str, Any]:
+        """Provide sensible defaults if no config file"""
+        return {
+            "anonymization": {
+                "strategy": "hybrid",
+                "llm": {
+                    "provider": "ollama",
+                    "base_url": "http://localhost:11434",
                     "model": "llama3.2:3b",
-                    "prompt": prompt,
-                    "stream": False
+                    "temperature": 0.1
+                },
+                "entity_recognition": {
+                    "auto_discover": True,
+                    "optimization": {
+                        "use_cache": True,
+                        "cache_ttl": 300
+                    }
                 }
-            )
-            return response.json()
+            }
+        }
+
+    def get_strategy(self) -> str:
+        return self.config["anonymization"]["strategy"]
+
+    def get_llm_config(self) -> Dict:
+        return self.config["anonymization"]["llm"]
+
+    def should_use_embeddings(self) -> bool:
+        return self.config["anonymization"].get("embeddings", {}).get("enabled", False)
 ```
+
+## Key Implementation Principles
+
+### 1. Dynamic Discovery Over Hardcoding
+```python
+# ❌ AVOID: Hardcoded entity lists
+context = {
+    "sites": ["DM-Albany", "Butler Communications", ...],  # Unmaintainable!
+    "devices": ["dmi01-albany-rtr01", ...]  # Gets outdated!
+}
+
+# ✅ PREFERRED: Dynamic discovery
+context = {
+    "patterns": self._discover_patterns_from_mappings(),
+    "samples": self._get_relevant_samples(query),
+    "stats": {"total_sites": len(self.mapping_service.forward_mappings["dcim_site.name"])}
+}
+```
+
+### 2. Intelligent Context Building
+- **Analyze the query first** to determine what types of entities to look for
+- **Load only relevant subsets** of mappings based on query keywords
+- **Use pattern matching** to identify potential entity formats
+- **Provide statistics** instead of full lists when appropriate
+
+### 3. Multi-Stage Recognition
+1. **Classification Stage**: Identify entity categories (sites, devices, network)
+2. **Context Building**: Load only relevant patterns and samples
+3. **Extraction Stage**: Find specific entities using focused context
+4. **Validation Stage**: Verify matches exist in mappings
+
+### 4. Performance Optimization
+- **Cache aggressively** at multiple levels (prompts, results, patterns)
+- **Index entities** by keyword, prefix, and pattern for fast lookup
+- **Limit context size** to stay within LLM token limits
+- **Use fallback strategies** to handle edge cases
+
+### 5. Configuration Over Code
+- Make all parameters tunable via configuration files
+- Support multiple strategies (LLM, regex, hybrid)
+- Allow feature flags for gradual rollout
+- Enable/disable components without code changes
 
 ## Benefits of Local LLM Approach
 
@@ -397,15 +737,28 @@ class DirectLLMAnonymizer:
 
 ## Conclusion
 
-The local LLM approach solves the fundamental limitations of regex-based anonymization while maintaining complete data privacy. It provides intelligent entity recognition that understands natural language variations, making the system more robust and user-friendly.
+The local LLM approach with **dynamic entity discovery** solves the fundamental limitations of regex-based anonymization while maintaining complete data privacy. By automatically discovering entities from the mapping database rather than hardcoding lists, the system remains maintainable and scalable as your Netbox instance evolves.
 
 Key advantages:
-- No PII sent to external services
-- Intelligent fuzzy matching
-- Natural language understanding
-- Easier to maintain than complex regex patterns
+- **No hardcoded entity lists** - Everything discovered dynamically from mappings
+- **No PII sent to external services** - LLM runs entirely locally
+- **Intelligent fuzzy matching** - Understands variations like "Butler" → "Butler Communications"
+- **Natural language understanding** - Works with any query phrasing
+- **Self-adapting** - Automatically handles new entities added to Netbox
+- **Configuration-driven** - Tune behavior without code changes
+- **Production-ready fallbacks** - Multiple strategies ensure reliability
 
-This strategy aligns with the core principle: **Privacy First** while dramatically improving user experience and system reliability.
+The dynamic approach ensures that:
+1. **New entities are automatically included** when mappings are regenerated
+2. **No maintenance required** for entity lists as infrastructure grows
+3. **Context is intelligently built** based on query analysis, not brute force
+4. **Performance is optimized** by loading only relevant entity subsets
+
+This strategy aligns with the core principles:
+- **Privacy First** - All processing happens locally
+- **Dynamic Discovery** - No hardcoded assumptions about your infrastructure
+- **Intelligent Context** - Smart sampling instead of loading all 1,816+ mappings
+- **Production Reliability** - Multiple fallback strategies ensure consistent operation
 
 ## Next Steps
 
